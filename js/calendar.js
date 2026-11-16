@@ -48,7 +48,7 @@
         <td class="cell-title">${T.esc(event.title)}${event.repeat ? ` <span class="time muted" title="${T.esc(T.repeatLabel(event.repeat))}">${U.icons.repeat}</span>` : ""}</td>
         <td>${category ? `<span class="chip t-${category.tone}">${T.esc(category.name)}</span>` : '<span class="muted">None</span>'}</td>
         <td class="muted">${T.esc(eventDay)}${eventTimeLabel(event) ? ` · ${eventTimeLabel(event)}` : " · Anytime"}</td>
-        <td class="col-act"><button class="icon-btn" data-edit-upcoming-event="${T.esc(event.id)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></td></tr>`;
+        <td class="col-act"><button class="icon-btn" data-edit-upcoming-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></td></tr>`;
     }).join("");
     const dow = [...DOW.slice(ws), ...DOW.slice(0, ws)];
 
@@ -92,7 +92,7 @@
     document.getElementById("manage").onclick = () => U.manageCategories({ done: render });
     root.querySelectorAll("[data-edit-upcoming-event]").forEach(button => button.onclick = () => {
       const event = S.events.find(item => item.id === button.dataset.editUpcomingEvent);
-      if (event) U.eventDialog({ event, done: render });
+      if (event) U.eventDialog({ event: { ...event, occurrenceDate: button.dataset.eventOccurrence }, done: render });
     });
     root.querySelectorAll("[data-day]").forEach(b => b.onclick = () => dayDialog(b.dataset.day));
   }
@@ -108,7 +108,7 @@
           ${eventTimeLabel(event) ? `<span class="time">${U.icons.clock}${T.esc(eventTimeLabel(event))}</span>` : ""}
           ${event.repeat ? `<span class="time">${U.icons.repeat}${T.esc(T.repeatLabel(event.repeat))}</span>` : ""}
           ${category ? `<span class="chip t-${category.tone}">${T.esc(category.name)}</span>` : ""}</div></div>
-        <button class="icon-btn" data-edit-event="${T.esc(event.id)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></article>`;
+        <button class="icon-btn" data-edit-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></article>`;
     }).join("");
     const d = U.modal(`<div class="dialog-body"><h2>${label}</h2><p class="muted">${ts.length} ${ts.length === 1 ? "task" : "tasks"} · ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}</p>
       ${ts.length ? `<h3>Tasks</h3><div class="task-list">${ts.map(t => U.taskRow(t, { date: false, edit: false })).join("")}</div>` : ""}
@@ -121,7 +121,7 @@
       const edit = e.target.closest("[data-edit-event]");
       if (edit) {
         const event = T.state.events.find(item => item.id === edit.dataset.editEvent);
-        if (event) U.eventDialog({ event, done: () => { d.close(); render(); dayDialog(key); } });
+        if (event) U.eventDialog({ event: { ...event, occurrenceDate: edit.dataset.eventOccurrence }, done: () => { d.close(); render(); dayDialog(key); } });
         return;
       }
       const tg = e.target.closest("[data-toggle]"); if (!tg) return;

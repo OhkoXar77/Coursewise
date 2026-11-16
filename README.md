@@ -207,7 +207,7 @@ The Admin screen is intended for authorized administrators and provides an overv
 Notifications are optional and must be enabled separately on every browser or device. Open **Profile → Task notifications**, tap **Enable notifications**, and allow the browser prompt. On iPhone or iPad, first add Coursewise to the Home Screen in Safari and open it from its Home Screen icon. Windows and macOS users may also need to allow the browser in the operating system's notification settings. Android users may need to allow notifications for the browser in Android settings. See [Task notification setup](TASK-REMINDERS-SETUP.md) for the full deployment and platform steps.
 
 ## Calendar Events
-Use **Add event** on the Calendar page to create a dated event with an optional start time, end time, category, and repeat rule. Events appear on the calendar and in their day's details, but are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days. The event form includes a reserved notification control; **event notifications are not enabled yet**.
+Use **Add event** on the Calendar page to create a dated event with an optional start time, end time, category, and repeat rule. If the end time is earlier than or equal to the start time, the event continues into the next day and appears on both dates. When deleting a repeating event, choose to delete only that occurrence, that and following occurrences, or the whole series. Events are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days. The event form includes a reserved notification control; **event notifications are not enabled yet**.
 
 ## Database Setup and Migrations
 The application uses Supabase for persistent data. Existing projects should have the appropriate migrations applied before using features that depend on them. Run only migrations that have not already been applied, in chronological order, using the Supabase SQL Editor.
@@ -223,6 +223,7 @@ The application uses Supabase for persistent data. Existing projects should have
 - `supabase/migrations/20261109000000_calendar_events.sql` — calendar event storage.
 - `supabase/migrations/20261109010000_calendar_event_recurrence.sql` — repeating calendar events.
 - `supabase/migrations/20261109020000_calendar_event_end_time.sql` — event end times.
+- `supabase/migrations/20261115000000_calendar_event_overnight.sql` — overnight events that appear on both dates.
 - `supabase/migrations/20261113000000_web_push_task_reminders.sql` — per-device push subscriptions and reminder delivery tracking.
 
 Other Supabase functions and setup requirements are documented in the accompanying setup files, including `TASK-REMINDERS-SETUP.md`, `ADMIN-SETUP.md`, `PROFILE-PHOTOS-SETUP.md`, `CANVAS-IMPORT-SETUP.md`, and `CANVAS-ANY-SCHOOL.md`.

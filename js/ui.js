@@ -529,11 +529,20 @@
   }
 
   function eventDeletionDialog({ event, done }) {
-    const d = modal(`<form class="dialog-body"><h2>Delete event?</h2>
-      <p>Delete “${esc(event.title)}”?</p>
+    const recurring = !!event.repeat;
+    const d = modal(`<form class="dialog-body"><h2>${recurring ? "Delete repeating event" : "Delete event?"}</h2>
+      ${recurring ? `<fieldset class="delete-options" aria-label="Repeating event deletion scope">
+        <label><input type="radio" name="delete-event-scope" value="this" checked> This event only</label>
+        <label><input type="radio" name="delete-event-scope" value="following"> This and following events</label>
+        <label><input type="radio" name="delete-event-scope" value="all"> All events</label>
+      </fieldset>` : `<p>Delete “${esc(event.title)}”?</p>`}
       <div class="dialog-actions"><button type="button" class="btn btn-outline" data-close>Cancel</button><button class="btn btn-danger">${icons.trash} Delete event</button></div></form>`);
     d.querySelector("form").onsubmit = e => { e.preventDefault(); run(async () => {
-      await T.deleteEvent(event.id); d.close(); toast("Event deleted"); done();
+      const scope = d.querySelector("[name=delete-event-scope]:checked")?.value || "all";
+      await T.deleteEvent(event.id, scope, event.occurrenceDate || event.date);
+      d.close();
+      toast(scope === "all" && recurring ? "All repeating events deleted" : scope === "following" ? "This and following events deleted" : "Event deleted");
+      done();
     }, e.submitter); };
   }
 
@@ -571,6 +580,7 @@
         ${eventTimePickerMarkup("e-start-time", "Start time (optional)", event?.time)}
         ${eventTimePickerMarkup("e-end-time", "End time (optional)", event?.endTime)}
       </div>
+      <p class="muted">If the end time is earlier than or equal to the start time, the event continues into the next day.</p>
       <div class="field"><label for="e-repeat">Repeat</label><select id="e-repeat" data-dd>${repeatOptions()}</select>
         <small class="hint${repeatVal && (typeof repeatVal !== "object" || !repeatVal.end || repeatVal.end.type === "never") ? "" : " hide"}" id="e-repeat-hint">This event appears on each matching date.</small></div>
       <div class="switch-row"><div><strong>Notifications</strong><small>Coming soon. Notifications are not enabled yet.</small></div>
@@ -675,7 +685,7 @@
         date: d.querySelector("#e-date").value, time: q("e-start-time-value").value || null,
         endTime: q("e-end-time-value").value || null, repeat: repeatVal };
       if (!p.title || !p.date) return;
-      if (p.endTime && (!p.time || p.endTime <= p.time)) throw new Error("End time must be after the start time.");
+      if (p.endTime && !p.time) throw new Error("Choose a start time before setting an end time.");
       await (event ? T.updateEvent(event.id, p) : T.addEvent(p));
       d.close(); toast(event ? "Event updated" : "Event added"); done();
     }, e.submitter); };

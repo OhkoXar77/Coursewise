@@ -8,9 +8,6 @@ create table if not exists public.coursewise_calendar_events (
   event_date date not null,
   event_time time,
   end_time time,
-  constraint coursewise_calendar_events_time_range check (
-    end_time is null or (event_time is not null and end_time > event_time)
-  ),
   category_id text,
   repeat_rule jsonb,
   created_at timestamptz not null default now()

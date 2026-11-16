@@ -48,8 +48,25 @@
   }
   function eventOccurrences(event, fromKey, endKey) {
     const rule = asRule(event.repeat), start = parseKey(event.date);
+    const spansNextDay = !!(event.time && event.endTime && event.endTime <= event.time);
+    const occurrenceFromKey = spansNextDay ? shiftKey(fromKey, -1) : fromKey;
     start.setHours(12, 0, 0, 0);
-    if (!rule) return event.date >= fromKey && event.date <= endKey ? [{ ...event }] : [];
+    const occurrences = [];
+    const addOccurrence = date => {
+      if (rule?.skipDates?.includes(date)) return;
+      const occurrence = { ...event, date, occurrenceDate: date };
+      if (date >= fromKey && date <= endKey) occurrences.push(occurrence);
+      if (spansNextDay) {
+        const nextDate = shiftKey(date, 1);
+        if (nextDate >= fromKey && nextDate <= endKey) {
+          occurrences.push({ ...occurrence, date: nextDate, time: null, occurrenceDate: date });
+        }
+      }
+    };
+    if (!rule) {
+      addOccurrence(event.date);
+      return occurrences;
+    }
 
     const interval = Math.max(1, Number(rule.interval) || 1), anchor = start.getDate();
     if (rule.unit === 'week' && rule.days?.length && !rule.days.includes(start.getDay())) {
@@ -57,30 +74,34 @@
     }
     const end = rule.end || { type: 'never' };
     const count = end.type === 'after' ? Math.max(1, Number(end.count) || 1) : Infinity;
-    const occurrences = [];
     let date = start, position = 0;
 
-    if (rule.unit === 'day' && fromKey > event.date) {
+    if (rule.unit === 'day' && occurrenceFromKey > event.date) {
       const dayNumber = key => {
         const [year, month, day] = key.split('-').map(Number);
         return Date.UTC(year, month - 1, day) / 86400000;
       };
-      position = Math.max(0, Math.ceil((dayNumber(fromKey) - dayNumber(event.date)) / interval));
+      position = Math.max(0, Math.ceil((dayNumber(occurrenceFromKey) - dayNumber(event.date)) / interval));
       date = new Date(start);
       date.setDate(date.getDate() + position * interval);
     } else {
-      while (toKey(date) < fromKey && position < count && (!end.date || toKey(date) <= end.date)) {
+      while (toKey(date) < occurrenceFromKey && position < count && (!end.date || toKey(date) <= end.date)) {
         date = stepDate(date, rule, anchor);
         position++;
       }
     }
 
     while (position < count && toKey(date) <= endKey && (!end.date || toKey(date) <= end.date)) {
-      if (toKey(date) >= fromKey) occurrences.push({ ...event, date: toKey(date) });
+      addOccurrence(toKey(date));
       date = stepDate(date, rule, anchor);
       position++;
     }
     return occurrences;
+  }
+  function shiftKey(key, days) {
+    const date = parseKey(key);
+    date.setDate(date.getDate() + days);
+    return toKey(date);
   }
   function weeklyTasks(task) {
     const rule = asRule(task.repeat);
@@ -256,7 +277,7 @@
   function validateEventTimes(p) {
     const validTime = value => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     if (!validTime(p.time) || !validTime(p.endTime)) throw new Error('Enter a valid event time.');
-    if (p.endTime && (!p.time || p.endTime <= p.time)) throw new Error('End time must be after the start time.');
+    if (p.endTime && !p.time) throw new Error('Choose a start time before setting an end time.');
   }
   function parseRepeat(r) {
     if (!r) return null;
@@ -506,7 +527,27 @@
         repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null
       }).eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
     },
-    async deleteEvent(n) {
+    async deleteEvent(n, scope = 'all', occurrenceDate) {
+      const event = state.events.find(item => item.id === n);
+      if (!event) throw new Error('Event not found. Reload the page.');
+      const rule = asRule(event.repeat), recurring = !!rule;
+      if (scope === 'this' && recurring) {
+        const skipDates = [...new Set([...(rule.skipDates || []), occurrenceDate || event.date])];
+        await write(db.from('coursewise_calendar_events').update({
+          repeat_rule: { ...rule, skipDates }
+        }).eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
+        return;
+      }
+      if (scope === 'following' && recurring) {
+        const until = shiftKey(occurrenceDate || event.date, -1);
+        const previous = eventOccurrences(event, event.date, until).filter(item => item.date === item.occurrenceDate);
+        if (previous.length) {
+          await write(db.from('coursewise_calendar_events').update({
+            repeat_rule: { ...rule, end: { type: 'on', date: previous[previous.length - 1].date } }
+          }).eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
+          return;
+        }
+      }
       await write(db.from('coursewise_calendar_events').delete().eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
     },
     async updateTask(n,p) {
