@@ -65,6 +65,108 @@ function reminderInstant(dueAt: Date, reminder: string, timezone: string) {
   }
 }
 
+type EventRepeatRule = {
+  unit?: string;
+  interval?: number;
+  days?: number[];
+  end?: { type?: string; date?: string; count?: number };
+  skipDates?: string[];
+};
+
+const presetEventRules: Record<string, EventRepeatRule> = {
+  daily: { unit: "day", interval: 1 },
+  weekdays: { unit: "week", interval: 1, days: [1, 2, 3, 4, 5] },
+  weekly: { unit: "week", interval: 1 },
+  monthly: { unit: "month", interval: 1 }
+};
+
+function shiftDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function dateNumber(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function localDateKey(date: Date, timezone: string) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function stepEventDate(dateKey: string, rule: EventRepeatRule, anchorDay: number) {
+  const interval = Math.max(1, Math.min(99, Number(rule.interval) || 1));
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (rule.unit === "day") return shiftDateKey(dateKey, interval);
+  if (rule.unit === "week") {
+    const days = rule.days?.length ? rule.days : [date.getUTCDay()];
+    const baseSunday = dateNumber(shiftDateKey(dateKey, -date.getUTCDay()));
+    for (let offset = 1; offset <= 7 * interval + 7; offset++) {
+      const candidate = shiftDateKey(dateKey, offset);
+      const candidateDay = new Date(dateNumber(candidate) * 86_400_000).getUTCDay();
+      const candidateSunday = dateNumber(shiftDateKey(candidate, -candidateDay));
+      if (days.includes(candidateDay) && (candidateSunday - baseSunday) / 7 % interval === 0) return candidate;
+    }
+    return shiftDateKey(dateKey, 7 * interval);
+  }
+  const months = rule.unit === "year" ? 12 * interval : interval;
+  const targetMonth = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${targetMonth.getUTCFullYear()}-${String(targetMonth.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(anchorDay, lastDay)).padStart(2, "0")}`;
+}
+
+function eventOccurrenceDates(event: Record<string, unknown>, timezone: string, now: Date) {
+  const eventDate = String(event.event_date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return [];
+  let fromDate: string, toDate: string;
+  try {
+    fromDate = localDateKey(now, timezone || "UTC");
+  } catch {
+    fromDate = localDateKey(now, "UTC");
+  }
+  toDate = shiftDateKey(fromDate, 8);
+  const rawRule = typeof event.repeat_rule === "string"
+    ? presetEventRules[event.repeat_rule] || null
+    : event.repeat_rule && typeof event.repeat_rule === "object"
+      ? event.repeat_rule as EventRepeatRule : null;
+  if (!rawRule || !["day", "week", "month", "year"].includes(String(rawRule.unit))) {
+    return eventDate >= fromDate && eventDate <= toDate ? [eventDate] : [];
+  }
+
+  const rule = rawRule;
+  const interval = Math.max(1, Math.min(99, Number(rule.interval) || 1));
+  const [, , anchorDay] = eventDate.split("-").map(Number);
+  let date = eventDate, position = 0;
+  if (rule.unit === "week" && rule.days?.length && !rule.days.includes(new Date(dateNumber(date) * 86_400_000).getUTCDay())) {
+    date = stepEventDate(date, rule, anchorDay);
+  }
+  const end = rule.end || { type: "never" };
+  const count = end.type === "after" ? Math.max(1, Number(end.count) || 1) : Infinity;
+  if (rule.unit === "day" && fromDate > date) {
+    position = Math.max(0, Math.ceil((dateNumber(fromDate) - dateNumber(date)) / interval));
+    date = shiftDateKey(date, position * interval);
+  } else {
+    while (date < fromDate && position < count && (!end.date || date <= end.date)) {
+      date = stepEventDate(date, rule, anchorDay);
+      position++;
+    }
+  }
+
+  const skipped = new Set(Array.isArray(rule.skipDates) ? rule.skipDates : []);
+  const dates: string[] = [];
+  while (position < count && date <= toDate && (!end.date || date <= end.date)) {
+    if (date >= fromDate && !skipped.has(date)) dates.push(date);
+    date = stepEventDate(date, rule, anchorDay);
+    position++;
+  }
+  return dates;
+}
+
 function validSubscription(value: unknown) {
   if (!value || typeof value !== "object") return false;
   const sub = value as Record<string, unknown>;
@@ -126,6 +228,7 @@ Deno.serve(async request => {
   }
   const userIdByAuth = new Map((users || []).map(user => [user.AuthUserID, String(user.UserID)]));
   const tasksByUser = new Map<string, Record<string, unknown>[]>();
+  const eventsByUser = new Map<string, Record<string, unknown>[]>();
 
   for (const authId of authIds) {
     const userId = userIdByAuth.get(authId);
@@ -144,6 +247,26 @@ Deno.serve(async request => {
       if ((data || []).length < 1000) break;
     }
     tasksByUser.set(authId, rows);
+
+    const eventRows: Record<string, unknown>[] = [];
+    let eventReminderColumnAvailable = true;
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from("coursewise_calendar_events")
+        .select("id,auth_user_id,title,event_date,event_time,reminder,repeat_rule")
+        .eq("auth_user_id", authId).not("reminder", "is", null).range(offset, offset + 999);
+      if (error) {
+        if (["42703", "PGRST204"].includes(error.code)) {
+          console.warn("Event reminders are unavailable until the calendar event reminder migration is applied.");
+          eventReminderColumnAvailable = false;
+          break;
+        }
+        console.error("Could not load pending event reminders:", error.message);
+        return reply({ error: "Could not load event reminders." }, 500);
+      }
+      eventRows.push(...(data || []));
+      if ((data || []).length < 1000) break;
+    }
+    eventsByUser.set(authId, eventReminderColumnAvailable ? eventRows : []);
   }
 
   for (const device of subscriptions) {
@@ -192,10 +315,62 @@ Deno.serve(async request => {
         }
       }
     }
+
+    const events = eventsByUser.get(device.auth_user_id) || [];
+    const timezone = String(device.timezone || "UTC");
+    for (const event of events) {
+      const reminder = String(event.reminder);
+      if (!reminderOffsets[reminder]) { skipped++; continue; }
+      const eventTime = typeof event.event_time === "string" ? event.event_time.slice(0, 5) : "09:00";
+      if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(eventTime)) { skipped++; continue; }
+      for (const occurrenceDate of eventOccurrenceDates(event, timezone, now)) {
+        let dueAt: Date;
+        try {
+          dueAt = zonedLocalTimeToUtc(occurrenceDate, eventTime, timezone);
+        } catch {
+          dueAt = zonedLocalTimeToUtc(occurrenceDate, eventTime, "UTC");
+        }
+        const remindAt = reminderInstant(dueAt, reminder, timezone);
+        if (!remindAt || remindAt < windowStart || remindAt > windowEnd) continue;
+
+        const eventId = String(event.id);
+        const { data: claim, error: claimError } = await db.from("coursewise_event_reminder_deliveries")
+          .upsert({ event_id: eventId, occurrence_date: occurrenceDate, subscription_id: device.id }, {
+            onConflict: "event_id,occurrence_date,subscription_id", ignoreDuplicates: true
+          }).select("id").maybeSingle();
+        if (claimError) {
+          console.error("Could not claim event reminder delivery:", claimError.message);
+          failed++;
+          continue;
+        }
+        if (!claim) continue;
+
+        try {
+          await webpush.sendNotification(device.subscription, JSON.stringify({
+            title: "Coursewise event reminder",
+            body: "An event you scheduled is coming up.",
+            tag: `coursewise-event-${eventId}-${occurrenceDate}`,
+            url: "calendar.html"
+          }), { TTL: 3600, urgency: "normal" });
+          sent++;
+        } catch (error) {
+          failed++;
+          const statusCode = Number((error as { statusCode?: number })?.statusCode);
+          if (statusCode === 404 || statusCode === 410) {
+            await db.from("coursewise_push_subscriptions").delete().eq("id", device.id);
+          } else {
+            await db.from("coursewise_event_reminder_deliveries").delete()
+              .eq("event_id", eventId).eq("occurrence_date", occurrenceDate).eq("subscription_id", device.id);
+          }
+        }
+      }
+    }
   }
 
   // Keep the idempotency ledger bounded without retaining task or endpoint details.
   await db.from("coursewise_task_reminder_deliveries")
+    .delete().lt("sent_at", new Date(now.getTime() - 90 * 24 * 60 * minute).toISOString());
+  await db.from("coursewise_event_reminder_deliveries")
     .delete().lt("sent_at", new Date(now.getTime() - 90 * 24 * 60 * minute).toISOString());
   return reply({ sent, failed, skipped });
 });

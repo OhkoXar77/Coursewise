@@ -21,8 +21,8 @@
       { id: "friend", title: "Add a friend", done: !!f && f.friends + f.pending > 0, skippable: true,
         text: "Friends see your streak and can cheer you on. Your tasks stay private.",
         action: cls => `<button type="button" class="btn ${cls}" data-friends-open="add">Add friend</button>` },
-      { id: "notifications", title: "Enable task notifications", done: ctx.notifications === true, skippable: true,
-        text: "Set up reminders for tasks with due dates on each device you use.",
+      { id: "notifications", title: "Enable task and event notifications", done: ctx.notifications === true, skippable: true,
+        text: "Set up reminders for tasks and calendar events on each device you use.",
         extra: `<details class="cw-intro-notification-help"><summary>Platform setup</summary><p><strong>Windows/macOS:</strong> allow browser notifications in both browser and system settings. <strong>iPhone/iPad:</strong> in Safari, choose Share → Add to Home Screen, open the new icon, then enable notifications. <strong>Android:</strong> allow browser notifications in the prompt and Android settings.</p></details>`,
         action: cls => `<a class="btn ${cls}" href="profile.html#notification-settings">Set up notifications</a>` }
     ].map(s => ({ ...s, skipped: !s.done && skips.includes(s.id) }));

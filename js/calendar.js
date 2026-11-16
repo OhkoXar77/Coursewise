@@ -108,10 +108,11 @@
           ${eventTimeLabel(event) ? `<span class="time">${U.icons.clock}${T.esc(eventTimeLabel(event))}</span>` : ""}
           ${event.repeat ? `<span class="time">${U.icons.repeat}${T.esc(T.repeatLabel(event.repeat))}</span>` : ""}
           ${category ? `<span class="chip t-${category.tone}">${T.esc(category.name)}</span>` : ""}</div></div>
-        <button class="icon-btn" data-edit-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></article>`;
+        <div class="task-actions"><button class="icon-btn" data-edit-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button>
+          <button class="icon-btn danger" data-delete-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Delete event ${T.esc(event.title)}">${U.icons.trash}</button></div></article>`;
     }).join("");
     const d = U.modal(`<div class="dialog-body"><h2>${label}</h2><p class="muted">${ts.length} ${ts.length === 1 ? "task" : "tasks"} · ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}</p>
-      ${ts.length ? `<h3>Tasks</h3><div class="task-list">${ts.map(t => U.taskRow(t, { date: false, edit: false })).join("")}</div>` : ""}
+      ${ts.length ? `<h3>Tasks</h3><div class="task-list">${ts.map(t => U.taskRow(t, { date: false, edit: true })).join("")}</div>` : ""}
       ${dayEvents.length ? `<h3>Events</h3><div class="calendar-event-list">${eventRows}</div>` : ""}
       ${!ts.length && !dayEvents.length ? '<p class="empty">Nothing scheduled for this day.</p>' : ""}
       <div class="dialog-actions"><button class="btn btn-primary" id="add-day">${U.icons.plus} Add task</button><button class="btn btn-primary" id="add-event-day">${U.icons.plus} Add event</button><button class="btn btn-outline" data-close>Close</button></div></div>`);
@@ -122,6 +123,21 @@
       if (edit) {
         const event = T.state.events.find(item => item.id === edit.dataset.editEvent);
         if (event) U.eventDialog({ event: { ...event, occurrenceDate: edit.dataset.eventOccurrence }, done: () => { d.close(); render(); dayDialog(key); } });
+        return;
+      }
+      const deleteButton = e.target.closest("[data-delete-event]");
+      if (deleteButton) {
+        const event = T.state.events.find(item => item.id === deleteButton.dataset.deleteEvent);
+        if (event) U.eventDeletionDialog({
+          event: { ...event, occurrenceDate: deleteButton.dataset.eventOccurrence },
+          done: () => { d.close(); render(); dayDialog(key); }
+        });
+        return;
+      }
+      const taskEdit = e.target.closest("[data-edit]");
+      if (taskEdit) {
+        const task = T.state.tasks.find(item => item.id === taskEdit.dataset.edit);
+        if (task) U.taskDialog({ task, done: () => { d.close(); render(); dayDialog(key); } });
         return;
       }
       const tg = e.target.closest("[data-toggle]"); if (!tg) return;

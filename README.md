@@ -35,7 +35,7 @@ These diagrams illustrate how Coursewise connects users, Canvas, Gemini AI, and 
 6. Use the navigation bar to switch between **Today**, **To-do**, **Calendar**, and **Profile**.
 7. You can also use the **Friends** icon in the top bar to connect with other students. Authorized admins have access to an additional admin screen, including a **Whimsy ideas** view of member theme suggestions.
 8. Account data and tasks are stored in Supabase so they remain available when you sign in again.
-9. Optional task notifications can be enabled separately on each device in **Profile → Task notifications**. See [Task notification setup](TASK-REMINDERS-SETUP.md) for project configuration and Windows, macOS, iPhone/iPad, and Android steps.
+9. Optional task and event notifications can be enabled separately on each device in **Profile → Task and event notifications**. See [Notification setup](TASK-REMINDERS-SETUP.md) for project configuration and Windows, macOS, iPhone/iPad, and Android steps.
 
 ## Screens and Features
 The screenshots below show the current desktop interface and selected feature panels. Some interface elements and colors change based on account settings.
@@ -202,12 +202,12 @@ The Admin screen is intended for authorized administrators and provides an overv
 9. The task can now appear on the Today, To-do, and Calendar pages according to its date and list.
 10. Mark the task complete when finished. Completing tasks also contributes to daily completion counts and streaks.
 
-### Getting Started: Enable Task Notifications
+### Getting Started: Enable Task and Event Notifications
 
-Notifications are optional and must be enabled separately on every browser or device. Open **Profile → Task notifications**, tap **Enable notifications**, and allow the browser prompt. On iPhone or iPad, first add Coursewise to the Home Screen in Safari and open it from its Home Screen icon. Windows and macOS users may also need to allow the browser in the operating system's notification settings. Android users may need to allow notifications for the browser in Android settings. See [Task notification setup](TASK-REMINDERS-SETUP.md) for the full deployment and platform steps.
+Notifications are optional and must be enabled separately on every browser or device. Open **Profile → Task and event notifications**, tap **Enable notifications**, and allow the browser prompt. On iPhone or iPad, first add Coursewise to the Home Screen in Safari and open it from its Home Screen icon. Windows and macOS users may also need to allow the browser in the operating system's notification settings. Android users may need to allow notifications for the browser in Android settings. See [Notification setup](TASK-REMINDERS-SETUP.md) for the full deployment and platform steps.
 
 ## Calendar Events
-Use **Add event** on the Calendar page to create a dated event with an optional start time, end time, category, and repeat rule. If the end time is earlier than or equal to the start time, the event continues into the next day and appears on both dates. When deleting a repeating event, choose to delete only that occurrence, that and following occurrences, or the whole series. Events are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days. The event form includes a reserved notification control; **event notifications are not enabled yet**.
+Use **Add event** on the Calendar page to create a dated event with an optional start time, end time, category, repeat rule, and reminder. Reminders use the same lead times as task reminders and are sent to each device where notifications are enabled. Events without a start time use 9:00 a.m. in each device's time zone. If the end time is earlier than or equal to the start time, the event continues into the next day and appears on both dates. When deleting a repeating event, choose to delete only that occurrence, that and following occurrences, or the whole series. Events are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days.
 
 ## Database Setup and Migrations
 The application uses Supabase for persistent data. Existing projects should have the appropriate migrations applied before using features that depend on them. Run only migrations that have not already been applied, in chronological order, using the Supabase SQL Editor.
@@ -225,6 +225,7 @@ The application uses Supabase for persistent data. Existing projects should have
 - `supabase/migrations/20261109020000_calendar_event_end_time.sql` — event end times.
 - `supabase/migrations/20261115000000_calendar_event_overnight.sql` — overnight events that appear on both dates.
 - `supabase/migrations/20261113000000_web_push_task_reminders.sql` — per-device push subscriptions and reminder delivery tracking.
+- `supabase/migrations/20261115010000_calendar_event_reminders.sql` — event reminder choices and per-device delivery tracking.
 
 Other Supabase functions and setup requirements are documented in the accompanying setup files, including `TASK-REMINDERS-SETUP.md`, `ADMIN-SETUP.md`, `PROFILE-PHOTOS-SETUP.md`, `CANVAS-IMPORT-SETUP.md`, and `CANVAS-ANY-SCHOOL.md`.
 
@@ -247,5 +248,5 @@ This demonstrates that the frontend communicates with Supabase and that user dat
 - Coursewise is designed to work on both desktop and mobile screens, including responsive navigation and layouts.
 - Personal streaks are based on at least one completed task per Mountain Time day. Removing a completed task can affect the current streak calculation; a saved personal best is maintained separately.
 - Calendar events and tasks are different types of records, even though both appear in the calendar.
-- Task reminders use Web Push after the Supabase sender, secrets, database schedule, and device permission are configured. Calendar event notifications are not enabled.
+- Task and event reminders use Web Push after the Supabase sender, secrets, database schedule, and device permission are configured.
 - The ERD image included above is the project diagram currently provided in this repository; review it separately if the database schema has changed since the diagram was created.

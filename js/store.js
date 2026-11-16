@@ -278,6 +278,7 @@
     const validTime = value => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     if (!validTime(p.time) || !validTime(p.endTime)) throw new Error('Enter a valid event time.');
     if (p.endTime && !p.time) throw new Error('Choose a start time before setting an end time.');
+    if (p.reminder && !['15m', '1h', '1d', '1w'].includes(p.reminder)) throw new Error('Choose a valid event reminder.');
   }
   function parseRepeat(r) {
     if (!r) return null;
@@ -309,6 +310,17 @@
       rows.push(...batch);
       if (batch.length < 1000) return rows;
     }
+  }
+  async function calendarEventsForUser(authUserId) {
+    const baseColumns = 'id,title,event_date,event_time,end_time,category_id,repeat_rule';
+    let response = await db.from('coursewise_calendar_events')
+      .select(`${baseColumns},reminder`).eq('auth_user_id', authUserId).order('event_date').order('event_time');
+    if (response.error && ['42703', 'PGRST204'].includes(response.error.code)) {
+      response = await db.from('coursewise_calendar_events')
+        .select(baseColumns).eq('auth_user_id', authUserId).order('event_date').order('event_time');
+    }
+    if (response.error) throw new Error(response.error.message);
+    return response.data || [];
   }
   // Appearance is optional: if the column has not been added yet, load the rest of the settings as before.
   async function loadSettings() {
@@ -354,8 +366,7 @@
       allRows('Lists','ListID,Title,SortOrder','SortOrder'),
       allRows('Tasks','*','TaskID'),
       document.body.dataset.page === 'calendar'
-        ? result(db.from('coursewise_calendar_events').select('id,title,event_date,event_time,end_time,category_id,repeat_rule')
-          .eq('auth_user_id', authUser.id).order('event_date').order('event_time'))
+        ? calendarEventsForUser(authUser.id)
         : Promise.resolve([]),
       // Streaks are a bonus: if the migration is not applied yet, the rest of the app still loads.
       Promise.resolve(db.rpc('coursewise_my_streak')).then(r => r.error ? null : r.data, () => null),
@@ -384,7 +395,7 @@
         .sort((a,b) => a.sortOrder-b.sortOrder || a.id.localeCompare(b.id)),
       events: events.map(event => ({ id: event.id, title: event.title, date: event.event_date,
         time: event.event_time?.slice(0, 5) || null, endTime: event.end_time?.slice(0, 5) || null,
-        categoryId: id(event.category_id), repeat: parseRepeat(event.repeat_rule) }))
+        categoryId: id(event.category_id), repeat: parseRepeat(event.repeat_rule), reminder: event.reminder || null }))
         .sort((a,b) => a.date.localeCompare(b.date) || (a.time || '99:99').localeCompare(b.time || '99:99') || a.title.localeCompare(b.title)),
       canvasConnected: false,
       completedToday: Number(streak?.completed_today) || 0,
@@ -515,7 +526,8 @@
       await write(db.from('coursewise_calendar_events').insert({
         auth_user_id: authUser.id, title: p.title, event_date: p.date,
         event_time: p.time || null, end_time: p.endTime || null, category_id: p.categoryId || null,
-        repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null
+        repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null,
+        reminder: p.reminder || null
       }));
     },
     async updateEvent(n,p) {
@@ -524,7 +536,8 @@
       await write(db.from('coursewise_calendar_events').update({
         title: p.title, event_date: p.date, event_time: p.time || null, end_time: p.endTime || null,
         category_id: p.categoryId || null,
-        repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null
+        repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null,
+        reminder: p.reminder || null
       }).eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
     },
     async deleteEvent(n, scope = 'all', occurrenceDate) {

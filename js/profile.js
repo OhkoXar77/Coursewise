@@ -101,8 +101,8 @@
                 <span class="switch"><input id="p-24h" type="checkbox"${T.timeFormat() === "24" ? " checked" : ""}><span></span></span></div>
               <div class="switch-row"><div><label for="replay-intro">Getting started guide</label><small>Show the setup steps on Today again.</small></div>
                 <button type="button" class="btn btn-outline" id="replay-intro">Show on Today</button></div></div></section>
-          <section class="card" id="notification-settings"><div class="section-head"><h2>Task notifications</h2></div>
-            <p class="muted">Enable browser notifications on this device to receive reminders for tasks with due dates. You can set a different reminder for each task.</p>
+          <section class="card" id="notification-settings"><div class="section-head"><h2>Task and event notifications</h2></div>
+            <p class="muted">Enable browser notifications on this device to receive reminders for tasks and calendar events. Set a different reminder for each task or event.</p>
             <p id="push-status" class="muted" role="status" aria-live="polite">Checking this device…</p>
             <button type="button" class="btn btn-primary" id="push-toggle">Enable notifications</button>
             <details class="cw-notification-help"><summary>Setup help for your device</summary>

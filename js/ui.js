@@ -566,6 +566,7 @@
   function eventDialog({ event, date, done }) {
     const initialDate = event?.date || date || T.toKey(new Date());
     let repeatVal = event?.repeat || null;
+    const reminder = event?.reminder || null;
     const repeatOptions = () => {
       const current = repeatVal && typeof repeatVal === "object" ? repeatVal : null;
       return options([["", "Does not repeat"], ...Object.entries(T.repeats),
@@ -583,8 +584,11 @@
       <p class="muted">If the end time is earlier than or equal to the start time, the event continues into the next day.</p>
       <div class="field"><label for="e-repeat">Repeat</label><select id="e-repeat" data-dd>${repeatOptions()}</select>
         <small class="hint${repeatVal && (typeof repeatVal !== "object" || !repeatVal.end || repeatVal.end.type === "never") ? "" : " hide"}" id="e-repeat-hint">This event appears on each matching date.</small></div>
-      <div class="switch-row"><div><strong>Notifications</strong><small>Coming soon. Notifications are not enabled yet.</small></div>
-        <span class="switch"><input type="checkbox" disabled aria-label="Notifications coming soon"><span></span></span></div>
+      <div class="switch-row"><div><label for="e-rem">Schedule reminder</label><small>Get a browser notification before this event. Enable notifications in Profile on each device.</small></div>
+        <span class="switch"><input id="e-rem" type="checkbox"${reminder ? " checked" : ""}><span></span></span></div>
+      <div class="field${reminder ? "" : " hide"}" id="e-rem-wrap"><label for="e-remwhen">Remind me</label>
+        <select id="e-remwhen" data-dd>${options([["15m", "15 minutes before"], ["1h", "1 hour before"], ["1d", "1 day before"], ["1w", "1 week before"]], reminder || "1h")}</select>
+        <small class="muted">Events without a start time use 9:00 a.m. on the event date.</small></div>
       <div class="dialog-actions"><button class="btn btn-primary">${event ? "Update event" : "Save event"}</button><button type="button" class="btn btn-outline" data-close>Cancel</button></div>
       ${event ? `<button type="button" class="delete-link" id="e-del">${icons.trash} Delete event</button>` : ""}</form>`);
     const q = selector => d.querySelector("#" + selector);
@@ -665,6 +669,7 @@
       timePickers.push({ input, close });
     });
     let previousRepeat = q("e-repeat").value;
+    q("e-rem").onchange = e => q("e-rem-wrap").classList.toggle("hide", !e.target.checked);
     q("e-repeat").onchange = e => {
       const value = e.target.value;
       if (value === "__custom") {
@@ -683,7 +688,8 @@
     d.querySelector("form").onsubmit = e => { e.preventDefault(); run(async () => {
       const p = { title: d.querySelector("#e-title").value.trim(), categoryId: q("e-cat").value || null,
         date: d.querySelector("#e-date").value, time: q("e-start-time-value").value || null,
-        endTime: q("e-end-time-value").value || null, repeat: repeatVal };
+        endTime: q("e-end-time-value").value || null, repeat: repeatVal,
+        reminder: q("e-rem").checked ? q("e-remwhen").value : null };
       if (!p.title || !p.date) return;
       if (p.endTime && !p.time) throw new Error("Choose a start time before setting an end time.");
       await (event ? T.updateEvent(event.id, p) : T.addEvent(p));
@@ -835,5 +841,5 @@
     void checkCanvasOnSessionStart(rerender);
   }
 
-  window.Tidy.ui = { run, icons, toast, updateCard, canvasNotice, canvasChangesFromSync, clearCanvasNewItems, modal, taskRow, taskDialog, eventDialog, categoryDialog, manageCategories, recurrenceDialog, listDialog, toggle, page, options };
+  window.Tidy.ui = { run, icons, toast, updateCard, canvasNotice, canvasChangesFromSync, clearCanvasNewItems, modal, taskRow, taskDialog, eventDialog, eventDeletionDialog, categoryDialog, manageCategories, recurrenceDialog, listDialog, toggle, page, options };
 })();

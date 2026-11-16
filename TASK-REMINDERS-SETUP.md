@@ -1,6 +1,6 @@
-# Task notification setup
+# Task and event notification setup
 
-Coursewise task reminders use browser Web Push. GitHub Pages continues to host the static app; Supabase stores each signed-in user's device subscriptions and runs the scheduled sender. Calendar events do not send notifications.
+Coursewise task and calendar event reminders use browser Web Push. GitHub Pages continues to host the static app; Supabase stores each signed-in user's device subscriptions and runs the scheduled sender.
 
 ## One-time project setup
 
@@ -11,7 +11,7 @@ Coursewise task reminders use browser Web Push. GitHub Pages continues to host t
    npx --yes supabase@latest db push --remote
    ```
 
-   The migration creates the per-device subscription table, a private delivery ledger, and an index for pending task reminders. Row-level security limits subscription records to their owner.
+   The migrations create the per-device subscription table, private delivery ledgers for tasks and events, and indexes for pending reminders. Row-level security limits subscription records to their owner.
 
 2. **Generate a VAPID key pair.** In PowerShell, run:
 
@@ -31,14 +31,19 @@ Coursewise task reminders use browser Web Push. GitHub Pages continues to host t
 
    Use the exact same public key in `js/supabase.js` and `VAPID_PUBLIC_KEY`. `VAPID_SUBJECT` can be a monitored email address or an HTTPS URL identifying the app. Keep the private key and cron secret out of Git and out of chat.
 
-5. **Deploy the sender and Canvas sync functions.** The Canvas sync update also clears a reminder if an assignment loses its due date.
+5. **Deploy (or redeploy) the Edge Functions.** Run these commands from the project folder (`IS401-Todo-List`). The first command uploads the local `send-task-reminders` function code to Supabase; this is the redeploy needed to activate event reminders. You do not need to reapply the migration you already ran.
 
    ```powershell
    npx --yes supabase@latest functions deploy send-task-reminders --no-verify-jwt --project-ref mhfvwzfoupeltdccpvmc
+   ```
+
+   The Canvas sync change also clears a task reminder if an assignment loses its due date. Deploy this function too if you want that update:
+
+   ```powershell
    npx --yes supabase@latest functions deploy canvas-import --project-ref mhfvwzfoupeltdccpvmc
    ```
 
-   The function is configured without Supabase JWT verification because the scheduled request uses its own shared secret header. It checks `x-coursewise-cron-secret` before doing any work.
+   If the CLI asks you to authenticate, run `npx --yes supabase@latest login` and follow its instructions, then retry the deploy command. The reminder function is configured without Supabase JWT verification because the scheduled request uses its own shared secret header. It checks `x-coursewise-cron-secret` before doing any work.
 
 6. **Enable the Supabase database extensions.** In the Supabase Dashboard for this project, open **Database → Extensions** and enable `pg_cron` and `pg_net`. Supabase Vault is used to keep the project URL, an API secret key, and the cron secret out of the scheduled SQL.
 
@@ -99,10 +104,10 @@ Coursewise task reminders use browser Web Push. GitHub Pages continues to host t
 
 ## Enable it on each device
 
-1. Sign in to Coursewise and open **Profile → Task notifications**.
+1. Sign in to Coursewise and open **Profile → Task and event notifications**.
 2. Tap **Enable notifications** and allow the browser prompt. Permission is requested only after the user presses this button.
 3. Repeat on every browser/device where reminders should appear. Each device stores a separate subscription. The button can turn notifications off on that device.
-4. Create or edit a task, choose a due date, turn on **Schedule Reminder**, choose the lead time, and save. If the due date is removed, the reminder control disappears and the saved reminder is cleared. A task with a date but no time uses 9:00 a.m. in that device's time zone; a task with a time uses its saved due time.
+4. Create or edit a task or calendar event, set its reminder lead time, and save. Tasks need a due date; if it is removed, the task reminder is cleared. An event with no start time uses 9:00 a.m. in that device's time zone. Repeating events receive a reminder for each matching occurrence, except occurrences deleted individually.
 
 ## Platform setup
 
