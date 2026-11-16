@@ -5,13 +5,48 @@
 .calendar-event .task-actions { display: flex; align-items: center; gap: .25rem; flex: none; }
 .calendar-event-main strong { overflow-wrap: anywhere; font-size: .9rem; }
 .calendar-event-main .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .25rem; }
+.event-location { display: block; margin-top: .2rem; color: var(--muted-fg); font-size: .76rem; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; text-decoration: none; }
+.calendar-event-main .event-location { display: inline; margin-top: 0; }
 .calendar-event-main .time { display: inline-flex; align-items: center; gap: .25rem; }
 .calendar-event-main .time svg { width: .9rem; height: .9rem; }
 .legend .calendar-event-legend i { border-radius: 1px; background: var(--muted-fg); transform: rotate(45deg); }
 .dialog-body > h3 { font-size: 1rem; }
+.dialog.event-dialog { max-height: calc(100dvh - 1rem); overflow-y: auto; overscroll-behavior: contain; }
+.event-dialog-body { gap: .7rem; padding: 1.15rem; }
+.event-dialog-body .field { gap: .25rem; }
+.event-dialog-body .field input,
+.event-dialog-body .field select,
+.event-dialog-body .category-picker-trigger,
+.event-dialog-body .cw-time-trigger { min-height: 2.35rem; }
+.event-dialog-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .7rem; align-items: start; }
+.event-dialog-body .switch-row { gap: .75rem; padding: .65rem .8rem; }
+.event-dialog-body .switch-row small { font-size: .73rem; line-height: 1.35; }
+.event-dialog-body > .muted { margin: 0; font-size: .78rem; line-height: 1.4; }
+.event-dialog-body .dialog-actions { position: sticky; bottom: 0; padding-top: .5rem; background: var(--card); }
+.event-dialog-body .delete-link { padding-top: .25rem; }
 .upcoming-events-hint { margin: -.65rem 0 0; font-size: .82rem; }
+.upcoming-events-heading { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.upcoming-events-sort { display: flex; align-items: center; gap: .4rem; margin-left: auto; }
+.upcoming-events-sort label { color: var(--muted-fg); font-size: .78rem; white-space: nowrap; }
+.upcoming-events-sort select { width: 8rem; min-height: 2.4rem; padding: 0 .6rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--card); color: var(--fg); font: inherit; font-size: .82rem; }
+.upcoming-events-sort select:focus { outline: 2px solid var(--ring); outline-offset: 0; border-color: var(--ring); }
+.event-priority { display: inline-flex; align-items: center; margin-left: .5rem; padding: .12rem .45rem; border-radius: 999px; font-size: .68rem; font-weight: 500; line-height: 1.4; vertical-align: middle; text-decoration: none; white-space: nowrap; }
+.event-priority.priority-low { background: var(--muted); color: var(--muted-fg); }
+.event-priority.priority-medium { background: color-mix(in oklch, var(--primary) 12%, var(--card)); color: var(--primary); }
+.event-priority.priority-high { background: var(--danger-soft); color: var(--danger); }
 .upcoming-event-list { max-height: 20rem; overflow: auto; overscroll-behavior: contain; }
 .upcoming-event-list .tasks { min-width: 34rem; }
 .upcoming-event-list .calendar-event-indicator { width: 2.5rem; }
 .upcoming-event-list .calendar-event-marker { display: block; margin: auto; }
 .upcoming-event-list .tasks td { padding-block: .7rem; }
+@media (max-width: 520px) {
+  .upcoming-events-card .section-head { flex-wrap: wrap; }
+  .upcoming-events-sort { margin-left: auto; }
+}
+@media (max-width: 420px) {
+  .event-dialog-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-height: 720px) {
+  .event-dialog-body { gap: .5rem; padding: .85rem; }
+  .event-dialog-body .switch-row { padding: .5rem .65rem; }
+}

@@ -567,11 +567,22 @@
   }
   async function calendarEventsForUser(authUserId) {
     const baseColumns = 'id,title,event_date,event_time,end_time,category_id,repeat_rule';
-    let response = await db.from('coursewise_calendar_events')
-      .select(`${baseColumns},reminder`).eq('auth_user_id', authUserId).order('event_date').order('event_time');
-    if (response.error && ['42703', 'PGRST204'].includes(response.error.code)) {
+    let response;
+    const columnSets = [
+      `${baseColumns},reminder,priority,location`,
+      `${baseColumns},priority,location`,
+      `${baseColumns},reminder,location`,
+      `${baseColumns},location`,
+      `${baseColumns},reminder,priority`,
+      `${baseColumns},priority`,
+      `${baseColumns},reminder`,
+      baseColumns
+    ];
+    for (const columns of columnSets) {
       response = await db.from('coursewise_calendar_events')
-        .select(baseColumns).eq('auth_user_id', authUserId).order('event_date').order('event_time');
+        .select(columns).eq('auth_user_id', authUserId).order('event_date').order('event_time');
+      if (!response.error) break;
+      if (!['42703', 'PGRST204'].includes(response.error.code)) break;
     }
     if (response.error) throw new Error(response.error.message);
     return response.data || [];
@@ -662,7 +673,9 @@
         .sort((a,b) => a.sortOrder-b.sortOrder || a.id.localeCompare(b.id)),
       events: events.map(event => ({ id: event.id, title: event.title, date: event.event_date,
         time: event.event_time?.slice(0, 5) || null, endTime: event.end_time?.slice(0, 5) || null,
-        categoryId: id(event.category_id), repeat: parseRepeat(event.repeat_rule), reminder: event.reminder || null }))
+        categoryId: id(event.category_id), repeat: parseRepeat(event.repeat_rule), reminder: event.reminder || null,
+        priority: [1, 2, 3].includes(Number(event.priority)) ? Number(event.priority) : 2,
+        location: event.location || null }))
         .sort((a,b) => a.date.localeCompare(b.date) || (a.time || '99:99').localeCompare(b.time || '99:99') || a.title.localeCompare(b.title)),
       canvasConnected: false,
       completedToday: Number(streak?.completed_today) || 0,
@@ -900,21 +913,25 @@
     async addEvent(p) {
       validateEventTimes(p);
       if (p.categoryId && !Tidy.cat(p.categoryId)) throw new Error('That category is no longer available. Reload the page and try again.');
+      if (![1, 2, 3].includes(Number(p.priority))) throw new Error('Choose a valid event priority.');
+      if (String(p.location || '').length > 300) throw new Error('Event location must be 300 characters or fewer.');
       await write(db.from('coursewise_calendar_events').insert({
         auth_user_id: authUser.id, title: p.title, event_date: p.date,
         event_time: p.time || null, end_time: p.endTime || null, category_id: p.categoryId || null,
         repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null,
-        reminder: p.reminder || null
+        reminder: p.reminder || null, priority: Number(p.priority), location: p.location?.trim() || null
       }));
     },
     async updateEvent(n,p) {
       validateEventTimes(p);
       if (p.categoryId && !Tidy.cat(p.categoryId)) throw new Error('That category is no longer available. Reload the page and try again.');
+      if (![1, 2, 3].includes(Number(p.priority))) throw new Error('Choose a valid event priority.');
+      if (String(p.location || '').length > 300) throw new Error('Event location must be 300 characters or fewer.');
       await write(db.from('coursewise_calendar_events').update({
         title: p.title, event_date: p.date, event_time: p.time || null, end_time: p.endTime || null,
         category_id: p.categoryId || null,
         repeat_rule: p.repeat ? (typeof p.repeat === 'string' ? PRESETS[p.repeat] : p.repeat) : null,
-        reminder: p.reminder || null
+        reminder: p.reminder || null, priority: Number(p.priority), location: p.location?.trim() || null
       }).eq('id',n).eq('auth_user_id',authUser.id).select('id').single());
     },
     async deleteEvent(n, scope = 'all', occurrenceDate) {

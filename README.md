@@ -92,9 +92,9 @@ The Calendar screen gives users a visual view of deadlines and other scheduled e
 2. View colored indicators for tasks and events on each date.
 3. Select any day to see its scheduled tasks and events.
 4. Add, edit, and complete tasks from the calendar.
-5. Use **Add event** to create calendar events separately from tasks. Events can have a category and optional start and end times.
+5. Use **Add event** to create calendar events separately from tasks. Events can have a category, low/medium/high priority, an optional location, and optional start and end times.
 6. Set repeating events to daily, weekdays, weekly, monthly, or a custom schedule, with an optional end condition.
-7. View sections for **Today's tasks**, **Other tasks** without due dates, and **Upcoming events** covering today and the next six days (up to 25 displayed).
+7. View sections for **Today's tasks**, **Other tasks** without due dates, and **Upcoming events** covering today and the next six days (up to 25 displayed). Upcoming events default to date order; choose **Priority** to show high priority events first, then by date, including future high-priority events beyond the six-day window (one next occurrence per repeating event).
 8. Manage task/event categories using the calendar's category management control.
 
 **Friends panel**
@@ -207,7 +207,7 @@ The Admin screen is intended for authorized administrators and provides an overv
 Notifications are optional and must be enabled separately on every browser or device. Open **Profile → Task and event notifications**, tap **Enable notifications**, and allow the browser prompt. On iPhone or iPad, first add Coursewise to the Home Screen in Safari and open it from its Home Screen icon. Windows and macOS users may also need to allow the browser in the operating system's notification settings. Android users may need to allow notifications for the browser in Android settings. See [Notification setup](TASK-REMINDERS-SETUP.md) for the full deployment and platform steps.
 
 ## Calendar Events
-Use **Add event** on the Calendar page to create a dated event with an optional start time, end time, category, repeat rule, and reminder. Reminders use the same lead times as task reminders and are sent to each device where notifications are enabled. Events without a start time use 9:00 a.m. in each device's time zone. If the end time is earlier than or equal to the start time, the event continues into the next day and appears on both dates. When deleting a repeating event, choose to delete only that occurrence, that and following occurrences, or the whole series. Events are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days.
+Use **Add event** on the Calendar page to create a dated event with an optional location, start time, end time, category, low/medium/high priority, repeat rule, and reminder. Locations appear in the Upcoming events list and selected-day popup, but not on the calendar grid. Events default to Medium priority, and the Upcoming events list can be sorted by date or priority (highest first, then date). Priority sorting also includes future high-priority events beyond the six-day window, with one next occurrence per repeating event. Reminders use the same lead times as task reminders and are sent to each device where notifications are enabled. Events without a start time use 9:00 a.m. in each device's time zone. If the end time is earlier than or equal to the start time, the event continues into the next day and appears on both dates. When deleting a repeating event, choose to delete only that occurrence, that and following occurrences, or the whole series. Events are stored separately from tasks and do not appear in the to-do lists. The Upcoming events section shows events for today and the next six days.
 
 ## Database Setup and Migrations
 The application uses Supabase for persistent data. Existing projects should have the appropriate migrations applied before using features that depend on them. Run only migrations that have not already been applied, in chronological order, using the Supabase SQL Editor.
@@ -227,6 +227,8 @@ The application uses Supabase for persistent data. Existing projects should have
 - `supabase/migrations/20261113000000_web_push_task_reminders.sql` — per-device push subscriptions and reminder delivery tracking.
 - `supabase/migrations/20261115010000_calendar_event_reminders.sql` — event reminder choices and per-device delivery tracking.
 - `supabase/migrations/20261115020000_task_occurrence_identity.sql` — stable recurring-task occurrence identities for calendar actions.
+- `supabase/migrations/20261116000000_calendar_event_priority.sql` — low, medium, and high event priorities.
+- `supabase/migrations/20261116010000_calendar_event_location.sql` — optional calendar event locations.
 
 Other Supabase functions and setup requirements are documented in the accompanying setup files, including `TASK-REMINDERS-SETUP.md`, `ADMIN-SETUP.md`, `PROFILE-PHOTOS-SETUP.md`, `CANVAS-IMPORT-SETUP.md`, and `CANVAS-ANY-SCHOOL.md`.
 

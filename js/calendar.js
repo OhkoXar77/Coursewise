@@ -4,6 +4,40 @@
   const now = new Date(); let month = new Date(now.getFullYear(), now.getMonth(), 1);
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const tone = t => T.cat(t.categoryId)?.tone || "slate";
+  const priorityName = value => ({ 1: "Low", 2: "Medium", 3: "High" }[value] || "Medium");
+  const eventSortKey = () => `cw-calendar-event-sort-v1:${T.state.user.email || T.state.user.username || "default"}`;
+  function upcomingSort() {
+    try { return localStorage.getItem(eventSortKey()) === "priority" ? "priority" : "date"; }
+    catch { return "date"; }
+  }
+  function sortUpcomingEvents(events, mode) {
+    return [...events].sort((a, b) => (mode === "priority" ? (b.priority || 2) - (a.priority || 2) : 0) ||
+      a.date.localeCompare(b.date) || (a.time || "99:99").localeCompare(b.time || "99:99") || a.title.localeCompare(b.title));
+  }
+  function nextOccurrenceAfter(event, afterKey) {
+    if (!event.repeat) return event.date > afterKey ? { ...event, occurrenceDate: event.date } : null;
+    const dateAfter = (key, days) => {
+      const date = T.parseKey(key);
+      date.setDate(date.getDate() + days);
+      return T.toKey(date);
+    };
+    const repeatEnd = typeof event.repeat === "object" && event.repeat.end?.type === "on"
+      ? event.repeat.end.date : null;
+    let span = 7;
+    while (span <= 36525) {
+      const from = dateAfter(afterKey, 1);
+      const requestedEnd = dateAfter(afterKey, span);
+      const end = repeatEnd && repeatEnd < requestedEnd ? repeatEnd : requestedEnd;
+      if (end < from) return null;
+      const next = T.eventOccurrences(event, from, end)
+        .filter(item => item.date === item.occurrenceDate)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (next) return next;
+      if (repeatEnd && end === repeatEnd) return null;
+      span *= 2;
+    }
+    return null;
+  }
   const occurrenceAttrs = task => task.occurrenceIdentity
     ? ` data-occurrence-series="${T.esc(task.occurrenceIdentity.seriesId)}" data-occurrence-date="${T.esc(task.occurrenceIdentity.date)}"`
     : "";
@@ -42,15 +76,24 @@
       .sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
     const upcomingEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6);
     const upcomingKey = T.toKey(upcomingEnd);
-    const upcomingEvents = S.events.flatMap(event => T.eventOccurrences(event, todayKey, upcomingKey))
-      .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "99:99").localeCompare(b.time || "99:99") || a.title.localeCompare(b.title));
-    const shownEvents = upcomingEvents.slice(0, 25);
+    const eventSort = upcomingSort();
+    const upcomingEvents = S.events.flatMap(event => T.eventOccurrences(event, todayKey, upcomingKey));
+    if (eventSort === "priority") {
+      for (const event of S.events) {
+        if (event.priority !== 3) continue;
+        const next = nextOccurrenceAfter(event, upcomingKey);
+        if (next) upcomingEvents.push(next);
+      }
+    }
+    const sortedUpcomingEvents = sortUpcomingEvents(upcomingEvents, eventSort);
+    const shownEvents = sortedUpcomingEvents.slice(0, 25);
     const upcomingRows = shownEvents.map(event => {
       const category = T.cat(event.categoryId);
       const eventDay = T.parseKey(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      const priority = priorityName(event.priority);
       return `<tr>
         <td class="calendar-event-indicator"><span class="calendar-event-marker t-${tone(event)}" aria-hidden="true"></span></td>
-        <td class="cell-title">${T.esc(event.title)}${event.repeat ? ` <span class="time muted" title="${T.esc(T.repeatLabel(event.repeat))}">${U.icons.repeat}</span>` : ""}</td>
+        <td class="cell-title"><div>${T.esc(event.title)}${event.repeat ? ` <span class="time muted" title="${T.esc(T.repeatLabel(event.repeat))}">${U.icons.repeat}</span>` : ""}<span class="event-priority priority-${priority.toLowerCase()}" aria-label="Priority: ${priority}">${priority}</span></div>${event.location ? `<span class="event-location">${T.esc(event.location)}</span>` : ""}</td>
         <td>${category ? `<span class="chip t-${category.tone}">${T.esc(category.name)}</span>` : '<span class="muted">None</span>'}</td>
         <td class="muted">${T.esc(eventDay)}${eventTimeLabel(event) ? ` · ${eventTimeLabel(event)}` : " · Anytime"}</td>
         <td class="col-act"><button class="icon-btn" data-edit-upcoming-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Edit event ${T.esc(event.title)}">${U.icons.pencil}</button></td></tr>`;
@@ -84,8 +127,9 @@
         ${table(undated, { time: false, empty: S.tasks.length ? "Every task has a date." : "Tasks without a due date show up here." })}</section>
 
       <section class="card table-card upcoming-events-card">
-        <div class="section-head"><h2>Upcoming events</h2><span class="count">${shownEvents.length}</span></div>
-        <p class="muted upcoming-events-hint">Today and the next 6 days${upcomingEvents.length > shownEvents.length ? ` · Showing ${shownEvents.length} of ${upcomingEvents.length}` : ""}</p>
+        <div class="section-head"><div class="upcoming-events-heading"><h2>Upcoming events</h2><span class="count">${shownEvents.length}</span></div>
+          <div class="upcoming-events-sort"><label for="upcoming-event-sort">Sort by</label><select id="upcoming-event-sort" aria-label="Sort upcoming events">${U.options([["date", "Date"], ["priority", "Priority"]], eventSort)}</select></div></div>
+        <p class="muted upcoming-events-hint">${eventSort === "priority" ? "High priority events beyond the next 6 days are included" : "Today and the next 6 days"}${sortedUpcomingEvents.length > shownEvents.length ? ` · Showing ${shownEvents.length} of ${sortedUpcomingEvents.length}` : ""}</p>
         <div class="upcoming-event-list"><table class="tasks"><thead><tr><th class="calendar-event-indicator"><span class="sr-only">Event</span></th><th>Event</th><th>Category</th><th>Date &amp; time</th><th class="col-act"><span class="sr-only">Edit</span></th></tr></thead>
           <tbody>${upcomingRows || '<tr><td colspan="5" class="muted" style="text-align:center;padding:1.5rem">No upcoming events.</td></tr>'}</tbody></table></div>
       </section></div>`;
@@ -95,6 +139,10 @@
     document.getElementById("add").onclick = () => U.taskDialog({ done: render });
     document.getElementById("add-event").onclick = () => U.eventDialog({ done: render });
     document.getElementById("manage").onclick = () => U.manageCategories({ done: render });
+    document.getElementById("upcoming-event-sort").onchange = e => {
+      try { localStorage.setItem(eventSortKey(), e.target.value === "priority" ? "priority" : "date"); } catch {}
+      render();
+    };
     root.querySelectorAll("[data-edit-upcoming-event]").forEach(button => button.onclick = () => {
       const event = S.events.find(item => item.id === button.dataset.editUpcomingEvent);
       if (event) U.eventDialog({ event: { ...event, occurrenceDate: button.dataset.eventOccurrence }, done: render });
@@ -108,8 +156,11 @@
     const label = T.parseKey(key).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     const eventRows = dayEvents.map(event => {
       const category = T.cat(event.categoryId);
+      const priority = priorityName(event.priority);
       return `<article class="calendar-event"><span class="calendar-event-marker t-${tone(event)}" aria-hidden="true"></span>
         <div class="calendar-event-main"><strong>${T.esc(event.title)}</strong><div class="task-meta">
+          <span class="event-priority priority-${priority.toLowerCase()}" aria-label="Priority: ${priority}">${priority}</span>
+          ${event.location ? `<span class="event-location">Location: ${T.esc(event.location)}</span>` : ""}
           ${eventTimeLabel(event) ? `<span class="time">${U.icons.clock}${T.esc(eventTimeLabel(event))}</span>` : ""}
           ${event.repeat ? `<span class="time">${U.icons.repeat}${T.esc(T.repeatLabel(event.repeat))}</span>` : ""}
           ${category ? `<span class="chip t-${category.tone}">${T.esc(category.name)}</span>` : ""}</div></div>

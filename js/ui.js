@@ -573,23 +573,30 @@
     const initialDate = event?.date || date || T.toKey(new Date());
     let repeatVal = event?.repeat || null;
     const reminder = event?.reminder || null;
+    const priority = [1, 2, 3].includes(Number(event?.priority)) ? Number(event.priority) : 2;
     const repeatOptions = () => {
       const current = repeatVal && typeof repeatVal === "object" ? repeatVal : null;
       return options([["", "Does not repeat"], ...Object.entries(T.repeats),
         ...(current ? [["__cur", T.repeatLabel(current)]] : []), ["__custom", "Custom…"]], current ? "__cur" : repeatVal || "");
     };
-    const d = modal(`<form class="dialog-body">
+    const d = modal(`<form class="dialog-body event-dialog-body">
       <h2>${event ? "Edit event" : "Add event"}</h2>
       <div class="field"><label for="e-title">Event</label><input id="e-title" required maxlength="200" value="${esc(event?.title)}" placeholder="What is happening?"></div>
-      <div class="field"><span class="field-label" id="e-cat-label">Category</span>${categoryPickerMarkup(event?.categoryId || "").replaceAll("f-cat", "e-cat")}</div>
-      <div class="field"><label for="e-date">Date</label><input id="e-date" type="date" required value="${esc(initialDate)}"></div>
+      <div class="field"><label for="e-location">Location (optional)</label><input id="e-location" maxlength="300" value="${esc(event?.location)}" placeholder="Address, venue, or room"></div>
+      <div class="event-dialog-grid">
+        <div class="field"><span class="field-label" id="e-cat-label">Category</span>${categoryPickerMarkup(event?.categoryId || "").replaceAll("f-cat", "e-cat")}</div>
+        <div class="field"><label for="e-priority">Priority</label><select id="e-priority" data-dd>${options([["1", "Low"], ["2", "Medium"], ["3", "High"]], String(priority))}</select></div>
+      </div>
+      <div class="event-dialog-grid">
+        <div class="field"><label for="e-date">Date</label><input id="e-date" type="date" required value="${esc(initialDate)}"></div>
+        <div class="field"><label for="e-repeat">Repeat</label><select id="e-repeat" data-dd>${repeatOptions()}</select>
+          <small class="hint${repeatVal && (typeof repeatVal !== "object" || !repeatVal.end || repeatVal.end.type === "never") ? "" : " hide"}" id="e-repeat-hint">This event appears on each matching date.</small></div>
+      </div>
       <div class="grid-2">
         ${eventTimePickerMarkup("e-start-time", "Start time (optional)", event?.time)}
         ${eventTimePickerMarkup("e-end-time", "End time (optional)", event?.endTime)}
       </div>
       <p class="muted">If the end time is earlier than or equal to the start time, the event continues into the next day.</p>
-      <div class="field"><label for="e-repeat">Repeat</label><select id="e-repeat" data-dd>${repeatOptions()}</select>
-        <small class="hint${repeatVal && (typeof repeatVal !== "object" || !repeatVal.end || repeatVal.end.type === "never") ? "" : " hide"}" id="e-repeat-hint">This event appears on each matching date.</small></div>
       <div class="switch-row"><div><label for="e-rem">Schedule reminder</label><small>Get a browser notification before this event. Enable notifications in Profile on each device.</small></div>
         <span class="switch"><input id="e-rem" type="checkbox"${reminder ? " checked" : ""}><span></span></span></div>
       <div class="field${reminder ? "" : " hide"}" id="e-rem-wrap"><label for="e-remwhen">Remind me</label>
@@ -597,6 +604,7 @@
         <small class="muted">Events without a start time use 9:00 a.m. on the event date.</small></div>
       <div class="dialog-actions"><button class="btn btn-primary">${event ? "Update event" : "Save event"}</button><button type="button" class="btn btn-outline" data-close>Cancel</button></div>
       ${event ? `<button type="button" class="delete-link" id="e-del">${icons.trash} Delete event</button>` : ""}</form>`);
+    d.classList.add("event-dialog");
     const q = selector => d.querySelector("#" + selector);
     const renderCategoryPicker = selected => { q("e-cat-picker").outerHTML = categoryPickerMarkup(selected).replaceAll("f-cat", "e-cat"); };
     const closeCategoryMenu = returnFocus => {
@@ -693,8 +701,10 @@
     };
     d.querySelector("form").onsubmit = e => { e.preventDefault(); run(async () => {
       const p = { title: d.querySelector("#e-title").value.trim(), categoryId: q("e-cat").value || null,
+        location: q("e-location").value.trim() || null,
         date: d.querySelector("#e-date").value, time: q("e-start-time-value").value || null,
         endTime: q("e-end-time-value").value || null, repeat: repeatVal,
+        priority: Number(q("e-priority").value),
         reminder: q("e-rem").checked ? q("e-remwhen").value : null };
       if (!p.title || !p.date) return;
       if (p.endTime && !p.time) throw new Error("Choose a start time before setting an end time.");
