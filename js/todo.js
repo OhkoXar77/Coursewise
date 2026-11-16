@@ -13,13 +13,7 @@
   const sortSettings = new Map();
   let sortSettingsOwner = null;
 
-  const sortModes = [
-    ["manual", "Custom order"],
-    ["title", "Alphabetically"],
-    ["due", "Due date"],
-    ["created", "Recently added"],
-    ["category", "Category"]
-  ];
+  const sortModes = T.taskSortModes;
   function ensureSortSettings() {
     const owner = T.state.user.email || T.state.user.username || "default";
     if (owner === sortSettingsOwner) return;
@@ -34,29 +28,14 @@
       }
     } catch {}
   }
-  function sortFor(listId) { return sortSettings.get(listId) || { mode: "manual", direction: "asc" }; }
+  function sortFor(listId) { return sortSettings.get(listId) || { mode: T.state.prefs.defaultSortOrder || "manual", direction: "asc" }; }
   function saveSortSettings() {
     try { localStorage.setItem(`cw-todo-sort-v1:${sortSettingsOwner || "default"}`, JSON.stringify(Object.fromEntries(sortSettings))); } catch {}
   }
   function setSort(listId, value) { sortSettings.set(listId, value); saveSortSettings(); }
   function sortedTasks(tasks, listId) {
     const { mode, direction } = sortFor(listId);
-    if (mode === "manual") return tasks;
-    const sign = direction === "desc" ? -1 : 1;
-    const compareText = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
-    return [...tasks].sort((a, b) => {
-      let left, right;
-      if (mode === "title") { left = a.title; right = b.title; }
-      else if (mode === "due") { left = a.due; right = b.due; }
-      else if (mode === "created") { left = a.createdAt; right = b.createdAt; }
-      else { left = T.cat(a.categoryId)?.name; right = T.cat(b.categoryId)?.name; }
-      const leftMissing = left == null || left === "", rightMissing = right == null || right === "";
-      if (leftMissing !== rightMissing) return leftMissing ? (direction === "asc" ? 1 : -1) : (direction === "asc" ? -1 : 1);
-      if (leftMissing) return (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id);
-      return sign * (mode === "due" || mode === "created"
-        ? String(left).localeCompare(String(right))
-        : compareText(left, right)) || (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id);
-    });
+    return T.sortTasks(tasks, mode, direction);
   }
 
 
@@ -164,7 +143,7 @@
     const listIds = new Set(S.lists.map(list => String(list.id)));
     const all = S.tasks.filter(task => task.listId == null || !listIds.has(String(task.listId)));
     if (!all.length && S.lists.length) return "";
-    const items = T.taskListItems(all, S.prefs.showDone);
+    const items = T.sortTasks(T.taskListItems(all, S.prefs.showDone), S.prefs.defaultSortOrder || "manual");
     const open = !collapsed.has("__unassigned__");
     return `<section class="card list-card" data-unassigned="true">
       <div class="list-head"><button class="list-toggle" data-collapse="__unassigned__" aria-expanded="${open}">${U.icons.down}<h2>Unassigned</h2><span class="count">${items.length}</span></button></div>

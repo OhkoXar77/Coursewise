@@ -93,6 +93,7 @@
             <div class="theme-grid" role="radiogroup" aria-label="Color theme">${T.themes.map(([id, name]) => `<label class="theme-opt th-${id}"><input type="radio" name="theme" value="${id}"${S.prefs.theme === id ? " checked" : ""}><i></i>${name}</label>`).join("")}</div></section>
           <section class="card"><div class="section-head"><h2>Preferences</h2></div>
             <div class="form"><div class="field"><label for="p-week">Week starts on</label><select id="p-week" data-dd>${U.options([["0", "Sunday"], ["1", "Monday"]], String(ws))}</select></div>
+              <div class="field"><label for="p-default-sort">Default sort order</label><select id="p-default-sort" data-dd>${U.options(T.taskSortModes, S.prefs.defaultSortOrder)}</select><small>Used for lists without a saved sort choice and Overdue until you choose a different sort.</small></div>
               <div class="switch-row"><div><label for="p-done">Show completed tasks</label><small>Show or hide completed tasks on Today, To-do, and Calendar.</small></div>
                 <span class="switch"><input id="p-done" type="checkbox"${S.prefs.showDone ? " checked" : ""}><span></span></span></div>
               <div class="switch-row"><div><label for="p-goose">Show Goose</label><small>Let the goose wander around Coursewise. Outfits and mischief appear in Whimsy Mode.</small></div>
@@ -163,6 +164,7 @@
     }, e.submitter); };
     root.querySelectorAll("[name=theme]").forEach(r => r.onchange = () => U.run(async () => { try { await T.setPrefs({ theme: r.value }); U.toast("Theme updated"); } finally { render(); } }, r));
     $("p-week").onchange = e => U.run(async () => { try { await T.setPrefs({ weekStart: Number(e.target.value) }); U.toast("Preference saved"); } finally { render(); } }, e.currentTarget);
+    $("p-default-sort").onchange = e => U.run(async () => { try { await T.setPrefs({ defaultSortOrder: e.target.value }); U.toast("Preference saved"); } finally { render(); } }, e.currentTarget);
     $("replay-intro").onclick = e => U.run(async () => { await T.setIntroDone(false); location.href = "home.html"; }, e.currentTarget);
     const pushStatus = $("push-status"), pushToggle = $("push-toggle");
     const updatePushStatus = async () => {

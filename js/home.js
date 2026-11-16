@@ -2,6 +2,28 @@
 (() => {
   const T = Tidy, U = T.ui, root = document.getElementById("main");
   const rows = (list, empty, o) => list.length ? list.map(t => U.taskRow(t, o)).join("") : `<p class="empty">${empty}</p>`;
+  const overdueSortKey = "__overdue__";
+  function overdueSort() {
+    const owner = T.state.user.email || T.state.user.username || "default";
+    try {
+      const saved = JSON.parse(localStorage.getItem(`cw-todo-sort-v1:${owner}`) || "{}")[overdueSortKey];
+      if (T.taskSortModes.some(([mode]) => mode === saved?.mode)) {
+        return { mode: saved.mode, direction: saved.direction === "desc" ? "desc" : "asc" };
+      }
+    } catch {}
+    return { mode: T.state.prefs.defaultSortOrder || "manual", direction: "asc" };
+  }
+  function saveOverdueSort(value) {
+    const owner = T.state.user.email || T.state.user.username || "default";
+    const key = `cw-todo-sort-v1:${owner}`;
+    let saved = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) saved = parsed;
+    } catch {}
+    saved[overdueSortKey] = value;
+    try { localStorage.setItem(key, JSON.stringify(saved)); } catch {}
+  }
 
   const SNAPSHOT_BANK = [
     ["You're all caught up. Enjoy the breathing room.", "Nothing left on your list. Nice work!", "You're done for today. Go enjoy yourself.", "Your to-do list is officially off duty."],
@@ -151,6 +173,8 @@
     const open = dueToday.filter(t => !t.done), doneN = dueToday.length - open.length;
     const listItems = T.taskListItems(all, T.state.prefs.showDone, today);
     const overdue = listItems.filter(t => !t.done && t.due && t.due < today);
+    const currentOverdueSort = overdueSort();
+    const sortedOverdue = T.sortTasks(overdue, currentOverdueSort.mode, currentOverdueSort.direction);
     const week = T.visibleTasks(T.taskOccurrences(all, today, weekEnd));
     const byTime = (x, y) => (x.time || "99:99").localeCompare(y.time || "99:99") || x.title.localeCompare(y.title);
     const weekDays = Array.from({ length: 7 }, (_, offset) => {
@@ -226,8 +250,10 @@
           <div class="hero-stat"><strong>${T.state.completedToday ?? 0}</strong><span>completed today</span></div></section>
         <section class="card today-card"><div class="section-head"><h2>Today</h2><span class="count">${visibleToday.length}</span></div>
           <div class="task-list${visibleToday.length ? " has-tasks" : ""}">${rows(visibleToday, fresh ? "Tasks due today show up here." : "Nothing due today. Enjoy it.", { date: false })}</div></section>
-        <section class="card overdue-card"><div class="section-head"><h2>Overdue</h2><span class="count warn">${overdue.length}</span></div>
-          <div class="task-list${overdue.length ? " has-tasks" : ""}">${rows(overdue, fresh ? "Anything past its due date shows up here." : "You're all caught up.", { overdue: true, showGrip: false })}</div></section>
+        <section class="card overdue-card"><div class="section-head"><div class="overdue-heading"><h2>Overdue</h2><span class="count warn">${overdue.length}</span></div>
+          <div class="overdue-sort"><label for="overdue-sort">Sort by</label><select id="overdue-sort" aria-label="Sort overdue tasks by">${U.options(T.taskSortModes, currentOverdueSort.mode)}</select>
+            <button type="button" class="sort-direction" id="overdue-sort-direction" aria-label="Sort overdue tasks ${currentOverdueSort.direction === "asc" ? "ascending; switch to descending" : "descending; switch to ascending"}"${currentOverdueSort.mode === "manual" ? " hidden" : ""}>${currentOverdueSort.direction === "asc" ? "↑" : "↓"}</button></div></div>
+          <div class="task-list${overdue.length ? " has-tasks" : ""}">${rows(sortedOverdue, fresh ? "Anything past its due date shows up here." : "You're all caught up.", { overdue: true, showGrip: false })}</div></section>
         <section class="card week-card" aria-labelledby="week-heading"><div class="section-head"><h2 id="week-heading">This week</h2><span class="count" aria-label="${week.length} tasks due in the next seven days">${week.length}</span></div>
           <div class="week-top"><div class="week-stat"><strong>${week.length ? `${week.length} ${week.length === 1 ? "thing" : "things"} due` : "Nothing due"}</strong></div>
             <div class="week-chart" aria-label="Tasks due each day this week">${weekChart}</div></div>
@@ -248,6 +274,18 @@
       root.querySelectorAll("[data-week-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.weekMode === mode)));
     };
     root.querySelectorAll("[data-week-mode]").forEach(b => b.onclick = () => setWeekMode(b.dataset.weekMode));
+    document.getElementById("overdue-sort").onchange = e => {
+      const previous = overdueSort();
+      const direction = e.target.value === previous.mode ? previous.direction : "asc";
+      saveOverdueSort({ mode: e.target.value, direction });
+      render();
+    };
+    document.getElementById("overdue-sort-direction").onclick = () => {
+      const current = overdueSort();
+      if (current.mode === "manual") return;
+      saveOverdueSort({ ...current, direction: current.direction === "asc" ? "desc" : "asc" });
+      render();
+    };
     root.querySelectorAll("[data-week-day]").forEach(b => b.onclick = () => {
       if (weekMode !== "day") setWeekMode("day");
       const group = document.getElementById(`week-group-${b.dataset.weekDay}`);

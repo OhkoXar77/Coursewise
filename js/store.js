@@ -7,6 +7,14 @@
   const fmtDate = k => parseKey(k).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   // 12-hour or 24-hour ("military") display. Times are always stored as 24-hour HH:MM.
   const TIME_KEY = "coursewise-time-format";
+  const TASK_SORT_MODES = [
+    ["manual", "Custom order"],
+    ["title", "Alphabetically"],
+    ["due", "Due date"],
+    ["created", "Recently added"],
+    ["category", "Category"]
+  ];
+  const validTaskSort = mode => TASK_SORT_MODES.some(([value]) => value === mode);
   let timeFormat = "12";
   try { if (localStorage.getItem(TIME_KEY) === "24") timeFormat = "24"; } catch {}
   const fmtTime = t => {
@@ -489,8 +497,34 @@
 
   const db = window.tidyClient;
   const tones = ["sky", "grape", "sun", "mint", "rose", "slate", "teal", "coral", "indigo", "lime"];
-  const empty = () => ({ signedIn: false, user: { first: '', last: '', email: '', username: '' }, prefs: { weekStart: 0, showDone: false, theme: 'green' }, categories: [], lists: [], tasks: [], taskOccurrences: [], events: [], canvasConnected: false, completedToday: 0, streak: null, introDone: true });
+  const empty = () => ({ signedIn: false, user: { first: '', last: '', email: '', username: '' }, prefs: { weekStart: 0, showDone: false, theme: 'green', defaultSortOrder: 'manual' }, categories: [], lists: [], tasks: [], taskOccurrences: [], events: [], canvasConnected: false, completedToday: 0, streak: null, introDone: true });
   let state = empty(), authUser, owner;
+  const defaultSortKey = () => `cw-default-task-sort-v1:${authUser?.id || "default"}`;
+  function savedDefaultSort() {
+    try {
+      const saved = localStorage.getItem(defaultSortKey());
+      return validTaskSort(saved) ? saved : "manual";
+    } catch { return "manual"; }
+  }
+  function sortTasks(tasks, mode, direction = "asc") {
+    if (mode === "manual") return tasks;
+    const sign = direction === "desc" ? -1 : 1;
+    const compareText = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+    return [...tasks].sort((a, b) => {
+      let left, right;
+      if (mode === "title") { left = a.title; right = b.title; }
+      else if (mode === "due") { left = a.due; right = b.due; }
+      else if (mode === "created") { left = a.createdAt; right = b.createdAt; }
+      else if (mode === "category") { left = Tidy.cat(a.categoryId)?.name; right = Tidy.cat(b.categoryId)?.name; }
+      else return (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id);
+      const leftMissing = left == null || left === "", rightMissing = right == null || right === "";
+      if (leftMissing !== rightMissing) return leftMissing ? (direction === "asc" ? 1 : -1) : (direction === "asc" ? -1 : 1);
+      if (leftMissing) return (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id);
+      return sign * (mode === "due" || mode === "created"
+        ? String(left).localeCompare(String(right))
+        : compareText(left, right)) || (a.sortOrder - b.sortOrder) || a.id.localeCompare(b.id);
+    });
+  }
   const requireDb = () => { if (!db) throw new Error('Could not load Supabase. Check your connection and reload.'); };
   async function result(query) { const {data, error} = await query; if (error) throw new Error(error.message); return data; }
   const id = n => n == null ? null : String(n);
@@ -605,6 +639,7 @@
         theme: THEMES.some(t => t[0] === settings.ColorTheme) ? settings.ColorTheme : 'green',
         weekStart: settings.WeekStart,
         showDone: settings.ShowDone,
+        defaultSortOrder: savedDefaultSort(),
         appearance: validMode(settings.Appearance),
         timeFormat,
         showGoose: settings.ShowGoose !== false
@@ -766,6 +801,8 @@
   }
   const Tidy = {
     toKey, shift, parseKey, fmtDate, fmtTime, timeFormat: () => timeFormat, esc, tones, themes: THEMES, repeats: REPEATS, repeatLabel, dayNames: DAYN, eventOccurrences, taskOccurrences, taskListItems,
+    taskSortModes: TASK_SORT_MODES,
+    sortTasks,
     get categories() { return state.categories; }, get state() { return state; },
     materializeTaskOccurrence,
     // One saved preference controls completed-task visibility on every page.
@@ -820,6 +857,11 @@
       try { localStorage.setItem(introKey('-skips'), JSON.stringify([...next])); } catch {}
     },
     async setPrefs(p) {
+      if ('defaultSortOrder' in p) {
+        if (!validTaskSort(p.defaultSortOrder)) throw new Error('Choose a valid default sort order.');
+        try { localStorage.setItem(defaultSortKey(), p.defaultSortOrder); } catch {}
+        state.prefs.defaultSortOrder = p.defaultSortOrder;
+      }
       if ('timeFormat' in p) {
         timeFormat = p.timeFormat === '24' ? '24' : '12';
         try { localStorage.setItem(TIME_KEY, timeFormat); } catch {}

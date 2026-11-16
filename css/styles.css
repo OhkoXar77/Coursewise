@@ -153,6 +153,15 @@ main{flex:1;min-width:0;padding:2.5rem 0 4rem}
 .list-card.is-drop-target{border:1px solid var(--primary)}
 .task.overdue{background:var(--danger-soft);border-color:var(--danger-line)}
 .overdue-card h2{color:var(--danger)}
+.overdue-card .section-head{flex-wrap:nowrap;min-width:0}
+.overdue-heading{display:flex;align-items:center;gap:.45rem;min-width:0;flex:0 1 auto}
+.overdue-heading h2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.overdue-heading .count{flex:none}
+.overdue-sort{display:flex;align-items:center;gap:.25rem;min-width:0;margin-left:auto;flex:0 1 auto}
+.overdue-sort label{color:var(--muted-fg);font-size:.72rem;white-space:nowrap}
+.overdue-sort select{width:7.5rem;min-width:4rem;max-width:9rem;min-height:2.4rem;padding:0 .45rem;border:1px solid var(--border);border-radius:.75rem;background:var(--card);color:var(--fg);font:inherit;font-size:.78rem;flex:1 1 7.5rem}
+.overdue-sort .sort-direction{width:2rem;height:2.4rem;flex:none}
+.overdue-sort select:focus{outline:2px solid var(--ring);outline-offset:0;border-color:var(--ring)}
 .task-body{flex:1;min-width:0}
 .task-title{font-weight:500;font-size:.92rem;line-height:1.35;overflow-wrap:anywhere}
 .task.done .task-title{color:var(--muted-fg);text-decoration:line-through}
