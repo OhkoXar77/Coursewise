@@ -4,6 +4,9 @@
   const now = new Date(); let month = new Date(now.getFullYear(), now.getMonth(), 1);
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const tone = t => T.cat(t.categoryId)?.tone || "slate";
+  const occurrenceAttrs = task => task.occurrenceIdentity
+    ? ` data-occurrence-series="${T.esc(task.occurrenceIdentity.seriesId)}" data-occurrence-date="${T.esc(task.occurrenceIdentity.date)}"`
+    : "";
   const eventTimeLabel = event => event.time
     ? `${T.fmtTime(event.time)}${event.endTime ? ` – ${T.fmtTime(event.endTime)}` : ""}`
     : event.endTime ? `Until ${T.fmtTime(event.endTime)}` : "";
@@ -13,11 +16,11 @@
     const rows = ts.map(t => {
       const c = T.cat(t.categoryId), list = T.state.lists.find(l => l.id === t.listId);
       return `<tr class="${t.done ? "done" : ""}">
-        <td class="col-check"><button class="check${t.done ? " on" : ""}" data-toggle="${t.id}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}">${t.done ? U.icons.check : ""}</button></td>
+        <td class="col-check"><button class="check${t.done ? " on" : ""}" data-toggle="${T.esc(t.id)}"${occurrenceAttrs(t)} aria-label="${t.done ? "Mark incomplete" : "Mark complete"}">${t.done ? U.icons.check : ""}</button></td>
         <td class="cell-title">${T.esc(t.title)}${t.repeat ? ` <span class="time muted" title="${T.esc(T.repeatLabel(t.repeat))}">${U.icons.repeat}</span>` : ""}</td>
         <td>${c ? `<span class="chip t-${c.tone}">${T.esc(c.name)}</span>` : '<span class="muted">None</span>'}</td>
         <td class="muted">${time ? (t.time ? T.fmtTime(t.time) : "Anytime") : T.esc(list?.title || "")}</td>
-        <td class="col-act"><button class="icon-btn" data-edit="${t.id}" aria-label="Edit task">${U.icons.pencil}</button></td></tr>`;
+        <td class="col-act"><button class="icon-btn" data-edit="${T.esc(t.id)}"${occurrenceAttrs(t)} aria-label="Edit task">${U.icons.pencil}</button></td></tr>`;
     }).join("");
     return `<div class="table-wrap"><table class="tasks"><thead><tr><th class="col-check"><span class="sr-only">Done</span></th><th>Task</th><th>Category</th><th>${time ? "Time" : "List"}</th><th class="col-act"><span class="sr-only">Edit</span></th></tr></thead><tbody>
       ${rows || `<tr><td colspan="5" class="muted" style="text-align:center;padding:1.5rem">${empty}</td></tr>`}</tbody></table></div>`;
@@ -30,11 +33,13 @@
     for (let i = lead; i > 0; i--) cells.push({ n: prevDays - i + 1, out: true });
     for (let d = 1; d <= days; d++) cells.push({ n: d, key: T.toKey(new Date(y, m, d)) });
     for (let d = 1; cells.length % 7; d++) cells.push({ n: d, out: true });
-    const visible = T.visibleTasks();
     const firstDay = T.toKey(new Date(y, m, 1)), lastDay = T.toKey(new Date(y, m + 1, 0));
+    const calendarTasks = T.taskOccurrences(S.tasks, firstDay, lastDay);
+    const visibleCalendarTasks = T.visibleTasks(calendarTasks);
     const calendarEvents = S.events.flatMap(event => T.eventOccurrences(event, firstDay, lastDay));
-    const todayKey = T.toKey(now), undated = visible.filter(t => !t.due);
-    const todays = visible.filter(t => t.due === todayKey).sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+    const todayKey = T.toKey(now), undated = T.visibleTasks().filter(t => !t.due);
+    const todays = T.visibleTasks(T.taskOccurrences(S.tasks, todayKey, todayKey))
+      .sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
     const upcomingEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6);
     const upcomingKey = T.toKey(upcomingEnd);
     const upcomingEvents = S.events.flatMap(event => T.eventOccurrences(event, todayKey, upcomingKey))
@@ -62,7 +67,7 @@
         <div class="cal-grid">${dow.map(d => `<div class="cal-dow">${d}</div>`).join("")}
         ${cells.map(c => {
           if (c.out) return `<div class="day out">${c.n}</div>`;
-          const ts = visible.filter(t => t.due === c.key), dayEvents = calendarEvents.filter(event => event.date === c.key);
+          const ts = visibleCalendarTasks.filter(t => t.due === c.key), dayEvents = calendarEvents.filter(event => event.date === c.key);
           const items = [...ts.map(task => `<i class="t-${tone(task)}${task.done ? " done" : ""}"></i>`),
             ...dayEvents.map(event => `<i class="t-${tone(event)} calendar-event-dot"></i>`)];
           return `<button class="day${c.key === todayKey ? " today" : ""}" data-day="${c.key}" aria-label="${T.fmtDate(c.key)}, ${items.length} ${items.length === 1 ? "item" : "items"}">${c.n}
@@ -98,7 +103,7 @@
   }
 
   function dayDialog(key) {
-    const ts = T.visibleTasks().filter(t => t.due === key);
+    const ts = T.visibleTasks(T.taskOccurrences(T.state.tasks, key, key));
     const dayEvents = T.state.events.flatMap(event => T.eventOccurrences(event, key, key));
     const label = T.parseKey(key).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     const eventRows = dayEvents.map(event => {
@@ -112,7 +117,7 @@
           <button class="icon-btn danger" data-delete-event="${T.esc(event.id)}" data-event-occurrence="${T.esc(event.occurrenceDate || event.date)}" aria-label="Delete event ${T.esc(event.title)}">${U.icons.trash}</button></div></article>`;
     }).join("");
     const d = U.modal(`<div class="dialog-body"><h2>${label}</h2><p class="muted">${ts.length} ${ts.length === 1 ? "task" : "tasks"} · ${dayEvents.length} ${dayEvents.length === 1 ? "event" : "events"}</p>
-      ${ts.length ? `<h3>Tasks</h3><div class="task-list">${ts.map(t => U.taskRow(t, { date: false, edit: true })).join("")}</div>` : ""}
+      ${ts.length ? `<h3>Tasks</h3><div class="task-list">${ts.map(t => U.taskRow(t, { date: false, edit: true, occurrenceActions: true })).join("")}</div>` : ""}
       ${dayEvents.length ? `<h3>Events</h3><div class="calendar-event-list">${eventRows}</div>` : ""}
       ${!ts.length && !dayEvents.length ? '<p class="empty">Nothing scheduled for this day.</p>' : ""}
       <div class="dialog-actions"><button class="btn btn-primary" id="add-day">${U.icons.plus} Add task</button><button class="btn btn-primary" id="add-event-day">${U.icons.plus} Add event</button><button class="btn btn-outline" data-close>Close</button></div></div>`);
@@ -136,12 +141,27 @@
       }
       const taskEdit = e.target.closest("[data-edit]");
       if (taskEdit) {
+        e.stopPropagation();
         const task = T.state.tasks.find(item => item.id === taskEdit.dataset.edit);
-        if (task) U.taskDialog({ task, done: () => { d.close(); render(); dayDialog(key); } });
+        if (task) {
+          const identity = taskEdit.dataset.occurrenceSeries && taskEdit.dataset.occurrenceDate
+            ? { seriesId: taskEdit.dataset.occurrenceSeries, date: taskEdit.dataset.occurrenceDate }
+            : null;
+          U.run(async () => {
+            const occurrence = identity
+              ? await T.materializeTaskOccurrence(identity.seriesId, identity.date)
+              : task;
+            U.taskDialog({ task: occurrence, done: () => { d.close(); render(); dayDialog(key); } });
+          }, taskEdit);
+        }
         return;
       }
       const tg = e.target.closest("[data-toggle]"); if (!tg) return;
-      e.stopPropagation(); U.run(async () => { await U.toggle(tg.dataset.toggle); d.close(); render(); dayDialog(key); }, tg);
+      e.stopPropagation();
+      const identity = tg.dataset.occurrenceSeries && tg.dataset.occurrenceDate
+        ? { seriesId: tg.dataset.occurrenceSeries, date: tg.dataset.occurrenceDate }
+        : null;
+      U.run(async () => { await U.toggle(tg.dataset.toggle, identity); d.close(); render(); dayDialog(key); }, tg);
     }, true);
   }
   U.page({ render });

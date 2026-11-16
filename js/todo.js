@@ -164,12 +164,12 @@
     const listIds = new Set(S.lists.map(list => String(list.id)));
     const all = S.tasks.filter(task => task.listId == null || !listIds.has(String(task.listId)));
     if (!all.length && S.lists.length) return "";
-    const items = all.filter(task => S.prefs.showDone || !task.done);
+    const items = T.taskListItems(all, S.prefs.showDone);
     const open = !collapsed.has("__unassigned__");
     return `<section class="card list-card" data-unassigned="true">
       <div class="list-head"><button class="list-toggle" data-collapse="__unassigned__" aria-expanded="${open}">${U.icons.down}<h2>Unassigned</h2><span class="count">${items.length}</span></button></div>
       ${open ? `<p class="muted" style="font-size:.8rem;margin:.2rem 0 .8rem">Tasks without a list. Use the pencil to organize them.</p>
-        <div class="task-list">${items.length ? items.map(task => U.taskRow(task, { selectable: true })).join("") : `<p class="empty">${all.length ? 'Only completed tasks are here. Turn on Show completed to see them.' : 'Tasks imported without a list will appear here.'}</p>`}</div>` : ""}
+        <div class="task-list">${items.length ? items.map(task => U.taskRow(task, { selectable: !task.virtualOccurrence })).join("") : `<p class="empty">${all.length ? 'Only completed tasks are here. Turn on Show completed to see them.' : 'Tasks imported without a list will appear here.'}</p>`}</div>` : ""}
     </section>`;
   }
 
@@ -198,7 +198,7 @@
         <button type="button" class="btn btn-outline" id="bulk-cancel">Cancel</button></div>
       </div>
       <div class="lists">${S.lists.map(l => {
-        const items = sortedTasks(S.tasks.filter(t => t.listId === l.id && (S.prefs.showDone || !t.done)), l.id), open = !collapsed.has(l.id);
+        const items = sortedTasks(T.taskListItems(S.tasks.filter(t => t.listId === l.id), S.prefs.showDone), l.id), open = !collapsed.has(l.id);
         const sort = sortFor(l.id), directionLabel = sort.direction === "asc" ? "ascending" : "descending";
         return `<section class="card list-card" data-list-id="${T.esc(l.id)}"><div class="list-head">
           <button class="list-drag" draggable="true" data-drag-list="${T.esc(l.id)}" aria-label="Reorder ${T.esc(l.title)}" aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder; use arrow keys to move">${U.icons.grip}</button>
@@ -214,7 +214,7 @@
           </div>
           <button class="icon-btn" data-rename="${l.id}" aria-label="Rename ${T.esc(l.title)}">${U.icons.pencil}</button>
           <button class="icon-btn danger" data-delete="${l.id}" aria-label="Delete ${T.esc(l.title)}">${U.icons.trash}</button></div>
-          ${open ? `<div class="task-list" data-task-list="${T.esc(l.id)}">${items.length ? items.map(t => U.taskRow(t, { draggable: true })).join("") : '<p class="empty">No tasks in this list.</p>'}</div>` : ""}</section>`;
+          ${open ? `<div class="task-list" data-task-list="${T.esc(l.id)}">${items.length ? items.map(t => U.taskRow(t, { draggable: !t.virtualOccurrence })).join("") : '<p class="empty">No tasks in this list.</p>'}</div>` : ""}</section>`;
       }).join("")}${!S.lists.length && !S.tasks.length ? emptyMarkup() : unassignedMarkup(S)}</div></div>`;
 
     root.querySelector('#show-completed').onclick = e => U.run(async () => {
@@ -492,7 +492,8 @@
     const card = [...root.querySelectorAll(".list-card")].find(item => item.dataset.listId === listId);
     const rows = card?.querySelectorAll(".task-list .task[data-task-id]");
     if (rows) return [...rows].map(row => row.dataset.taskId);
-    return sortedTasks(T.state.tasks.filter(item => item.listId === listId && (T.state.prefs.showDone || !item.done)), listId).map(item => item.id);
+    return sortedTasks(T.taskListItems(T.state.tasks.filter(item => item.listId === listId), T.state.prefs.showDone), listId)
+      .filter(item => !item.virtualOccurrence).map(item => item.id);
   }
 
   function persistTaskOrder(taskId, targetListId, targetIds, sourceIds, restoreFocus = false) {

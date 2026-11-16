@@ -196,37 +196,43 @@
     d.showModal(); return d;
   }
 
-  function taskRow(t, { edit = true, date = true, overdue = false, draggable = false, selectable = false } = {}) {
+  function taskRow(t, { edit = true, date = true, overdue = false, draggable = false, selectable = false, occurrenceActions = false, showGrip = true } = {}) {
     const c = T.cat(t.categoryId);
+    const identityAttrs = t.occurrenceIdentity
+      ? ` data-occurrence-series="${esc(t.occurrenceIdentity.seriesId)}" data-occurrence-date="${esc(t.occurrenceIdentity.date)}"`
+      : "";
+    const editIdentityAttrs = occurrenceActions || t.virtualOccurrence ? identityAttrs : "";
     return `<div class="task${t.done ? " done" : ""}${overdue ? " overdue" : ""}"${draggable || selectable ? ` data-task-id="${esc(t.id)}"` : ""}${draggable ? ' draggable="true"' : ""}>
-      ${draggable ? `<button type="button" class="task-drag" data-drag-task="${esc(t.id)}" aria-label="Reorder or move task ${esc(t.title)}" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag the task or use arrow keys">${icons.grip}</button>` : ""}
-      <button class="check${t.done ? " on" : ""}" data-toggle="${t.id}" aria-label="${t.done ? "Mark incomplete" : "Mark complete"}: ${esc(t.title)}" aria-pressed="${t.done}">${t.done ? icons.check : ""}</button>
+      ${showGrip && draggable ? `<button type="button" class="task-drag" data-drag-task="${esc(t.id)}" aria-label="Reorder or move task ${esc(t.title)}" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag the task or use arrow keys">${icons.grip}</button>` : showGrip && t.virtualOccurrence ? `<span class="task-drag task-drag-placeholder" aria-hidden="true">${icons.grip}</span>` : ""}
+      <button class="check${t.done ? " on" : ""}" data-toggle="${esc(t.id)}"${identityAttrs} aria-label="${t.done ? "Mark incomplete" : "Mark complete"}: ${esc(t.title)}" aria-pressed="${t.done}">${t.done ? icons.check : ""}</button>
       <div class="task-body"><p class="task-title">${esc(t.title)}</p><div class="task-meta">
         ${c ? `<span class="chip t-${c.tone}">${esc(c.name)}</span>` : ""}
         ${date && t.due ? `<span class="${overdue ? "late" : ""}">${T.fmtDate(t.due)}</span>` : ""}
         ${t.time ? `<span class="time">${icons.clock}${T.fmtTime(t.time)}</span>` : ""}
         ${t.repeat ? `<span class="time">${icons.repeat}${esc(T.repeatLabel(t.repeat))}</span>` : ""}
         ${t.fromCanvas ? "<span>Canvas</span>" : ""}</div></div>
-        ${edit ? `<button class="icon-btn" data-edit="${t.id}" aria-label="Edit task">${icons.pencil}</button><button class="icon-btn danger" data-delete-task="${t.id}" aria-label="Delete task">${icons.trash}</button>` : ""}</div>`;
+        ${edit ? `<button class="icon-btn" data-edit="${esc(t.id)}"${editIdentityAttrs} aria-label="Edit task">${icons.pencil}</button><button class="icon-btn danger"${occurrenceActions && t.occurrenceIdentity ? ` data-delete-occurrence="${esc(t.id)}"${identityAttrs}` : ` data-delete-task="${esc(t.id)}"${identityAttrs}`} aria-label="Delete task">${icons.trash}</button>` : ""}</div>`;
   }
 
   const options = (items, sel) => items.map(([v, l]) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(l)}</option>`).join("");
 
-  function taskDeletionDialog({ task, done }) {
+  function taskDeletionDialog({ task, done, occurrenceOnly = false }) {
     const hasPrevious = T.state.tasks.some(item => item.spawned === task.id);
     const finiteLegacy = task.repeat?.materialized && !task.repeat.seriesId && ["after", "on"].includes(task.repeat.end?.type);
-    const recurring = !!task.repeat && (!task.repeat.materialized || !!task.repeat.seriesId || finiteLegacy) || !!task.spawned || hasPrevious;
-    const d = modal(`<form class="dialog-body"><h2>${recurring ? "Delete repeating task" : "Delete task?"}</h2>
+    const identity = task.occurrenceIdentity;
+    const occurrence = occurrenceOnly ? identity : null;
+    const recurring = !occurrence && (!!task.repeat && (!task.repeat.materialized || !!task.repeat.seriesId || finiteLegacy) || !!task.spawned || hasPrevious);
+    const d = modal(`<form class="dialog-body"><h2>${occurrence ? "Delete this occurrence?" : recurring ? "Delete repeating task" : "Delete task?"}</h2>
       ${recurring ? `<fieldset class="delete-options" aria-label="Repeating task deletion scope">
         <label><input type="radio" name="delete-scope" value="this" checked> This task</label>
         <label><input type="radio" name="delete-scope" value="following"> This and following tasks</label>
         <label><input type="radio" name="delete-scope" value="all"> All tasks</label>
-      </fieldset>` : `<p>Delete “${esc(task.title)}”?</p>`}
+      </fieldset>` : `<p>${occurrence ? `Delete the ${T.fmtDate(occurrence.date)} occurrence of “${esc(task.title)}”?` : `Delete “${esc(task.title)}”?`}</p>`}
       <div class="dialog-actions"><button type="button" class="btn btn-outline" data-close>Cancel</button><button class="btn btn-danger">${icons.trash} Delete</button></div></form>`);
     d.querySelector("form").onsubmit = e => { e.preventDefault(); run(async () => {
       const scope = d.querySelector("[name=delete-scope]:checked")?.value || "this";
-      await T.deleteTask(task.id, scope);
-      d.close(); toast(scope === "all" ? "Repeating task deleted" : scope === "following" ? "This and following tasks deleted" : "Task deleted"); done();
+      await T.deleteTask(task.id, scope, identity);
+      d.close(); toast(occurrence ? "Occurrence deleted" : scope === "all" ? "Repeating task deleted" : scope === "following" ? "This and following tasks deleted" : "Task deleted"); done();
     }, e.submitter); };
   }
 
@@ -341,7 +347,7 @@
     if (cat) d.querySelector("#c-del").onclick = () => categoryDeleteDialog({ cat, done: () => { d.close(); done(null); } });
   }
 
-  function taskDialog({ task, listId, due, done }) {
+  function taskDialog({ task, listId, due, done, occurrenceOnly = false }) {
     const S = T.state, r = task?.due ? task?.reminder : null;
     const initialCategory = task ? task.categoryId || "" : "";
     let repeatVal = task?.repeat || null;
@@ -383,7 +389,7 @@
           </div>
         </div>
       </div>
-      <div class="field"><label for="f-rep">Repeat</label><select id="f-rep" data-dd>${repOptions()}</select>
+      <div class="field"><label for="f-rep">Repeat</label><select id="f-rep" data-dd${task?.occurrenceIdentity ? " disabled" : ""}>${repOptions()}</select>
         <small class="hint${showRepeatHint(repeatVal) ? "" : " hide"}" id="rep-hint">Marking it done adds the next one automatically.</small></div>
       <div id="f-rem-section"${task?.due || due ? "" : " class=\"hide\""}>
         <div class="switch-row"><label for="f-rem">Schedule Reminder</label><span class="switch"><input id="f-rem" type="checkbox"${r ? " checked" : ""}><span></span></span></div>
@@ -524,7 +530,7 @@
     }, e.submitter); };
     if (task) q("f-del").onclick = e => {
       e.preventDefault();
-      taskDeletionDialog({ task, done: () => { d.close(); done(); } });
+      taskDeletionDialog({ task, occurrenceOnly, done: () => { d.close(); done(); } });
     };
   }
 
@@ -698,8 +704,8 @@
     if (event) d.querySelector("#e-del").onclick = () => eventDeletionDialog({ event, done: () => { d.close(); done(); } });
   }
 
-  async function toggle(id) {
-    const r = await T.toggleTask(id);
+  async function toggle(id, identity) {
+    const r = await T.toggleTask(id, identity);
     if (r.next) toast(`Done. The next one is due ${T.fmtDate(r.next)}.`);
     else if (r.ended) toast("Done. That was the last one in the series.");
   }
@@ -829,12 +835,33 @@
     window.CoursewiseFriends?.mount();
     const rerender = () => render();
     document.addEventListener("click", e => {
-      const tg = e.target.closest("[data-toggle]"), ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-delete-task]");
-      if (tg) run(async () => { await toggle(tg.dataset.toggle); rerender(); }, tg);
-      if (ed) taskDialog({ task: T.state.tasks.find(t => t.id === ed.dataset.edit), done: rerender });
+      const tg = e.target.closest("[data-toggle]"), ed = e.target.closest("[data-edit]"),
+        del = e.target.closest("[data-delete-task]"), delOccurrence = e.target.closest("[data-delete-occurrence]");
+      const identityFor = element => element?.dataset.occurrenceSeries && element?.dataset.occurrenceDate
+        ? { seriesId: element.dataset.occurrenceSeries, date: element.dataset.occurrenceDate }
+        : null;
+      if (tg) run(async () => { await toggle(tg.dataset.toggle, identityFor(tg)); rerender(); }, tg);
+      if (ed) {
+        const identity = identityFor(ed);
+        if (identity) run(async () => {
+          const task = await T.materializeTaskOccurrence(identity.seriesId, identity.date);
+          taskDialog({ task, occurrenceOnly: true, done: rerender });
+        }, ed);
+        else taskDialog({ task: T.state.tasks.find(t => t.id === ed.dataset.edit), done: rerender });
+      }
+      if (delOccurrence) run(async () => {
+        const identity = identityFor(delOccurrence);
+        if (!identity) throw new Error("The occurrence could not be identified.");
+        const task = await T.materializeTaskOccurrence(identity.seriesId, identity.date);
+        taskDeletionDialog({ task, occurrenceOnly: true, done: rerender });
+      }, delOccurrence);
       if (del) {
         const task = T.state.tasks.find(item => item.id === del.dataset.deleteTask);
-        if (task) taskDeletionDialog({ task, done: rerender });
+        const identity = identityFor(del);
+        if (task) taskDeletionDialog({
+          task: identity ? { ...task, due: identity.date, occurrenceIdentity: identity } : task,
+          done: rerender
+        });
       }
     });
     rerender();

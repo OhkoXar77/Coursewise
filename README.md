@@ -200,7 +200,7 @@ The Admin screen is intended for authorized administrators and provides an overv
 7. Optionally enable **Schedule Reminder** and choose how long before the due time to be notified. This option is available only while a due date is set. Tasks without a specific due time use 9:00 a.m. in the notification device's time zone.
 8. Save the task.
 9. The task can now appear on the Today, To-do, and Calendar pages according to its date and list.
-10. Mark the task complete when finished. Completing tasks also contributes to daily completion counts and streaks.
+10. Mark the task complete when finished. Completing tasks also contributes to daily completion counts and streaks. Recurring tasks show all scheduled occurrences on the Calendar page; occurrences can be completed or edited independently. To-do lists and Today’s Overdue section show every open overdue occurrence and any open occurrences through the latest completed date, followed by the next upcoming occurrence. Deleting only this occurrence preserves the rest of the series.
 
 ### Getting Started: Enable Task and Event Notifications
 
@@ -226,6 +226,7 @@ The application uses Supabase for persistent data. Existing projects should have
 - `supabase/migrations/20261115000000_calendar_event_overnight.sql` — overnight events that appear on both dates.
 - `supabase/migrations/20261113000000_web_push_task_reminders.sql` — per-device push subscriptions and reminder delivery tracking.
 - `supabase/migrations/20261115010000_calendar_event_reminders.sql` — event reminder choices and per-device delivery tracking.
+- `supabase/migrations/20261115020000_task_occurrence_identity.sql` — stable recurring-task occurrence identities for calendar actions.
 
 Other Supabase functions and setup requirements are documented in the accompanying setup files, including `TASK-REMINDERS-SETUP.md`, `ADMIN-SETUP.md`, `PROFILE-PHOTOS-SETUP.md`, `CANVAS-IMPORT-SETUP.md`, and `CANVAS-ANY-SCHOOL.md`.
 

@@ -143,6 +143,7 @@ main{flex:1;min-width:0;padding:2.5rem 0 4rem}
 .task-drag:hover{background:var(--muted);color:var(--fg)}
 .task-drag:active{cursor:grabbing}
 .task-drag svg{width:1rem;height:1rem}
+.task-drag-placeholder{pointer-events:none;cursor:default}
 .task.is-dragging{opacity:.45}
 .task.task-drop-before,.task.task-drop-after{border-color:var(--primary)}
 .task.task-drop-before::before,.task.task-drop-after::after{position:absolute;left:.75rem;right:.75rem;height:3px;border-radius:99px;background:var(--primary);content:"";pointer-events:none}

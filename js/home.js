@@ -146,11 +146,12 @@
     const weekEnd = T.toKey(lastWeekDay);
     renderedDay = today;
     scheduleMidnightRefresh();
-    const dueToday = all.filter(t => t.due === today);
+    const dueToday = T.taskOccurrences(all, today, today);
     const visibleToday = T.visibleTasks(dueToday);
     const open = dueToday.filter(t => !t.done), doneN = dueToday.length - open.length;
-    const overdue = all.filter(t => !t.done && t.due && t.due < today);
-    const week = T.visibleTasks(all.filter(t => t.due && t.due >= today && t.due <= weekEnd));
+    const listItems = T.taskListItems(all, T.state.prefs.showDone, today);
+    const overdue = listItems.filter(t => !t.done && t.due && t.due < today);
+    const week = T.visibleTasks(T.taskOccurrences(all, today, weekEnd));
     const byTime = (x, y) => (x.time || "99:99").localeCompare(y.time || "99:99") || x.title.localeCompare(y.title);
     const weekDays = Array.from({ length: 7 }, (_, offset) => {
       const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
@@ -169,8 +170,11 @@
       const cat = T.cat(task.categoryId), day = weekDays.find(d => d.key === task.due);
       const meta = [showList ? listName(task) : "", cat?.name || ""].filter(Boolean).map(T.esc).join(" · ");
       const when = [showDay ? day?.short : "", task.time ? T.fmtTime(task.time) : ""].filter(Boolean).join(" · ");
+      const occurrenceAttrs = task.occurrenceIdentity
+        ? ` data-occurrence-series="${T.esc(task.occurrenceIdentity.seriesId)}" data-occurrence-date="${T.esc(task.occurrenceIdentity.date)}"`
+        : "";
       return `<li class="week-row${task.done ? " done" : ""}">
-        <button type="button" class="check${task.done ? " on" : ""}" data-toggle="${T.esc(task.id)}" aria-label="${task.done ? "Mark incomplete" : "Mark complete"}: ${T.esc(task.title)}" aria-pressed="${task.done}">${task.done ? U.icons.check : ""}</button>
+        <button type="button" class="check${task.done ? " on" : ""}" data-toggle="${T.esc(task.id)}"${occurrenceAttrs} aria-label="${task.done ? "Mark incomplete" : "Mark complete"}: ${T.esc(task.title)}" aria-pressed="${task.done}">${task.done ? U.icons.check : ""}</button>
         <span class="week-dot${cat ? ` t-${cat.tone}` : ""}" aria-hidden="true"></span>
         <span class="week-row-main"><span class="week-row-title">${T.esc(task.title)}</span>${meta ? `<span class="week-row-meta">${meta}</span>` : ""}</span>
         ${when ? `<span class="week-row-when">${T.esc(when)}</span>` : ""}</li>`;
@@ -223,7 +227,7 @@
         <section class="card today-card"><div class="section-head"><h2>Today</h2><span class="count">${visibleToday.length}</span></div>
           <div class="task-list${visibleToday.length ? " has-tasks" : ""}">${rows(visibleToday, fresh ? "Tasks due today show up here." : "Nothing due today. Enjoy it.", { date: false })}</div></section>
         <section class="card overdue-card"><div class="section-head"><h2>Overdue</h2><span class="count warn">${overdue.length}</span></div>
-          <div class="task-list${overdue.length ? " has-tasks" : ""}">${rows(overdue, fresh ? "Anything past its due date shows up here." : "You're all caught up.", { overdue: true })}</div></section>
+          <div class="task-list${overdue.length ? " has-tasks" : ""}">${rows(overdue, fresh ? "Anything past its due date shows up here." : "You're all caught up.", { overdue: true, showGrip: false })}</div></section>
         <section class="card week-card" aria-labelledby="week-heading"><div class="section-head"><h2 id="week-heading">This week</h2><span class="count" aria-label="${week.length} tasks due in the next seven days">${week.length}</span></div>
           <div class="week-top"><div class="week-stat"><strong>${week.length ? `${week.length} ${week.length === 1 ? "thing" : "things"} due` : "Nothing due"}</strong></div>
             <div class="week-chart" aria-label="Tasks due each day this week">${weekChart}</div></div>

@@ -103,6 +103,195 @@
     date.setDate(date.getDate() + days);
     return toKey(date);
   }
+  function taskSeriesId(tasks, task) {
+    const seriesId = asRule(task.repeat)?.seriesId;
+    if (seriesId) return String(seriesId);
+    let first = task;
+    const seen = new Set([task.id]);
+    while (true) {
+      const previous = tasks.find(candidate => candidate.spawned === first.id && !seen.has(candidate.id));
+      if (!previous) break;
+      first = previous;
+      seen.add(first.id);
+    }
+    return `legacy-${first.id}`;
+  }
+  function recurrencePattern(repeat) {
+    const rule = { ...asRule(repeat) };
+    delete rule.materialized;
+    delete rule.seriesId;
+    delete rule.seriesPosition;
+    delete rule.seriesStart;
+    delete rule.seriesDays;
+    delete rule.seriesEnd;
+    return JSON.stringify(rule);
+  }
+  function taskOccurrences(tasks, fromKey, endKey, occurrenceStates = state.taskOccurrences) {
+    const knownTaskIds = new Set(tasks.map(task => task.id));
+    const occurrenceByTask = new Map(occurrenceStates.filter(item => item.taskId && !item.skipped && knownTaskIds.has(item.taskId))
+      .map(item => [item.taskId, item]));
+    const skipped = new Set(occurrenceStates.filter(item => item.skipped)
+      .map(item => `${item.seriesId}\u0000${item.date}`));
+    const output = new Map();
+    for (const task of tasks) {
+      if (!task.due || task.due < fromKey || task.due > endKey) continue;
+      const identity = occurrenceByTask.get(task.id);
+      const seriesId = identity?.seriesId || (task.repeat ? taskSeriesId(tasks, task) : null);
+      const occurrenceDate = identity?.date || task.due;
+      if (seriesId && skipped.has(`${seriesId}\u0000${occurrenceDate}`)) continue;
+      const occurrenceIdentity = seriesId ? { seriesId, date: occurrenceDate } : null;
+      const occurrence = { ...task, occurrenceIdentity, virtualOccurrence: false };
+      const key = seriesId ? `${seriesId}\u0000${occurrenceDate}` : `task\u0000${task.id}`;
+      const existing = output.get(key);
+      if (!existing || (task.done && !existing.done)) {
+        output.set(key, occurrence);
+      }
+    }
+
+    const patterns = new Map();
+    const registeredKeys = new Set(occurrenceStates.filter(item => item.taskId && !item.skipped && knownTaskIds.has(item.taskId))
+      .map(item => `${item.seriesId}\u0000${item.date}`));
+    for (const task of tasks) {
+      const rule = asRule(task.repeat);
+      if (!rule || rule.materialized || !task.due) continue;
+      const registration = occurrenceByTask.get(task.id);
+      const seriesId = taskSeriesId(tasks, task), pattern = recurrencePattern(rule);
+      const key = `${seriesId}\u0000${pattern}`;
+      const existing = patterns.get(key);
+      const anchor = rule.seriesStart || registration?.date || task.due;
+      if (!existing || anchor < existing.due) {
+        patterns.set(key, { ...task, due: anchor, repeat: { ...rule, seriesId }, seriesId });
+      }
+    }
+
+    for (const template of patterns.values()) {
+      const seriesId = template.seriesId;
+      const dates = eventOccurrences({ date: template.due, repeat: template.repeat }, fromKey, endKey);
+      for (const item of dates) {
+        const key = `${seriesId}\u0000${item.date}`;
+        if (skipped.has(key) || registeredKeys.has(key) || output.has(key)) continue;
+        output.set(key, {
+          ...template,
+          due: item.date,
+          done: false,
+          occurrenceIdentity: { seriesId, date: item.date },
+          virtualOccurrence: true
+        });
+      }
+    }
+    return [...output.values()].sort((a, b) => a.due.localeCompare(b.due) ||
+      (a.time || "99:99").localeCompare(b.time || "99:99") || a.title.localeCompare(b.title));
+  }
+  function nextScheduledDate(task, afterKey) {
+    const rule = asRule(task.repeat);
+    if (!rule || rule.materialized || !task.due) return null;
+    const startKey = rule.seriesStart || task.due;
+    const anchor = parseKey(startKey).getDate();
+    let date = parseKey(startKey), position = 1;
+    if (rule.unit === "week" && rule.days?.length && !rule.days.includes(date.getDay())) {
+      date = stepDate(date, rule, anchor);
+    }
+    const count = rule.end?.type === "after" ? Math.max(1, Number(rule.end.count) || 1) : Infinity;
+    if (rule.unit === "day" && toKey(date) <= afterKey) {
+      const dayNumber = key => {
+        const [year, month, day] = key.split("-").map(Number);
+        return Date.UTC(year, month - 1, day) / 86400000;
+      };
+      const interval = Math.max(1, Number(rule.interval) || 1);
+      const steps = Math.floor((dayNumber(afterKey) - dayNumber(toKey(date))) / interval) + 1;
+      position += steps;
+      date.setDate(date.getDate() + steps * interval);
+    } else {
+      while (toKey(date) <= afterKey && position < count) {
+        date = stepDate(date, rule, anchor);
+        position++;
+      }
+    }
+    if (position > count || toKey(date) <= afterKey ||
+      (rule.end?.type === "on" && rule.end.date && toKey(date) > rule.end.date)) return null;
+    return toKey(date);
+  }
+  function taskListItems(tasks, showDone, today = toKey(new Date())) {
+    const result = tasks.filter(task => !task.repeat || !task.due);
+    const recurring = tasks.filter(task => task.repeat && task.due);
+    if (!recurring.length) return result.filter(task => showDone || !task.done);
+
+    const start = recurring.reduce((first, task) => {
+      const seriesStart = asRule(task.repeat)?.seriesStart || task.due;
+      return seriesStart < first ? seriesStart : first;
+    }, recurring[0].due);
+    const latestDone = new Map();
+    for (const task of recurring) {
+      if (!task.done) continue;
+      const seriesId = taskSeriesId(tasks, task);
+      const date = task.occurrenceIdentity?.date || task.due;
+      if (date > (latestDone.get(seriesId) || "")) latestDone.set(seriesId, date);
+    }
+    const through = [...latestDone.values()].reduce((end, date) => date > end ? date : end, today);
+    const occurrences = taskOccurrences(tasks, start, through)
+      .filter(task => task.repeat && task.due);
+
+    for (const task of recurring) {
+      if (task.due <= through) continue;
+      const seriesId = taskSeriesId(tasks, task);
+      const occurrenceDate = task.occurrenceIdentity?.date || task.due;
+      if (state.taskOccurrences.some(item =>
+        item.skipped && item.seriesId === seriesId && item.date === occurrenceDate)) continue;
+      occurrences.push({
+        ...task,
+        occurrenceIdentity: task.occurrenceIdentity || { seriesId, date: occurrenceDate }
+      });
+    }
+
+    const nextBySeries = new Map();
+    const visibleOccurrences = [];
+    for (const task of occurrences) {
+      const seriesId = task.occurrenceIdentity?.seriesId || taskSeriesId(tasks, task);
+      const completedThrough = latestDone.get(seriesId) || "";
+      if (task.done) {
+        if (showDone) visibleOccurrences.push(task);
+      } else if (task.due <= today || task.due <= completedThrough) {
+        visibleOccurrences.push(task);
+      } else if (task.due > today) {
+        const current = nextBySeries.get(seriesId);
+        if (!current || task.due < current.due) nextBySeries.set(seriesId, task);
+      }
+    }
+
+    const series = new Map();
+    for (const task of recurring) {
+      const seriesId = taskSeriesId(tasks, task), pattern = recurrencePattern(task.repeat);
+      const patterns = series.get(seriesId) || new Map();
+      const current = patterns.get(pattern);
+      if (!current || task.due < current.due) patterns.set(pattern, task);
+      series.set(seriesId, patterns);
+    }
+    for (const [seriesId, patterns] of series) {
+      const boundary = latestDone.get(seriesId) || "";
+      for (const task of patterns.values()) {
+        let candidateDate = nextScheduledDate(task, boundary > today ? boundary : today);
+        while (candidateDate) {
+          const candidate = taskOccurrences(tasks, candidateDate, candidateDate)
+            .find(item => item.occurrenceIdentity?.seriesId === seriesId && item.occurrenceIdentity.date === candidateDate);
+          if (!candidate) {
+            const rule = asRule(task.repeat);
+            if (rule?.end?.type === "on" && rule.end.date && candidateDate >= rule.end.date) break;
+            const next = { ...task, due: candidateDate };
+            candidateDate = nextScheduledDate(next, candidateDate);
+            continue;
+          }
+          if (!candidate.done) {
+            const current = nextBySeries.get(seriesId);
+            if (!current || candidate.due < current.due) nextBySeries.set(seriesId, candidate);
+            break;
+          }
+          candidateDate = nextScheduledDate(task, candidateDate);
+        }
+      }
+    }
+    result.push(...visibleOccurrences, ...nextBySeries.values());
+    return result.filter(task => showDone || !task.done);
+  }
   function weeklyTasks(task) {
     const rule = asRule(task.repeat);
     const days = rule?.unit === "week" && rule.days?.length > 1
@@ -146,7 +335,7 @@
     if (!end || !["after", "on"].includes(end.type)) {
       const seriesId = rule.seriesId || uid();
       return { tasks: weeklyTasks(task).map((item, index) => ({
-        ...item, repeat: { ...asRule(item.repeat), seriesId, seriesPosition: index }
+        ...item, repeat: { ...asRule(item.repeat), seriesId, seriesPosition: index, seriesStart: item.due }
       })), truncated: false };
     }
 
@@ -162,7 +351,7 @@
     let truncated = false;
     while (tasks.length < count && (end.type !== "on" || toKey(date) <= end.date)) {
       if (tasks.length === 100) { truncated = true; break; }
-      const repeat = { ...rule, materialized: true, seriesId, seriesPosition: tasks.length };
+      const repeat = { ...rule, materialized: true, seriesId, seriesPosition: tasks.length, seriesStart: toKey(parseKey(task.due)) };
       if (rule.unit === "week" && rule.days?.length > 1) {
         repeat.seriesDays = [...new Set(rule.days)];
         repeat.seriesEnd = end;
@@ -208,6 +397,10 @@
         current = tasks.find(item => item.id === current.spawned);
       }
     };
+    if (scope === "this") {
+      ids.add(task.id);
+      return ids;
+    }
     const seriesId = task.repeat?.seriesId, legacySeries = seriesId ? [] : legacySeriesTasks(tasks, task);
     if (seriesId) {
       const series = tasks.filter(item => item.repeat?.seriesId === seriesId), familyIds = new Set();
@@ -263,6 +456,7 @@
       delete recurrence.materialized;
       delete recurrence.seriesId;
       delete recurrence.seriesPosition;
+      delete recurrence.seriesStart;
       delete recurrence.seriesDays;
       delete recurrence.seriesEnd;
       return JSON.stringify(recurrence);
@@ -295,7 +489,7 @@
 
   const db = window.tidyClient;
   const tones = ["sky", "grape", "sun", "mint", "rose", "slate", "teal", "coral", "indigo", "lime"];
-  const empty = () => ({ signedIn: false, user: { first: '', last: '', email: '', username: '' }, prefs: { weekStart: 0, showDone: false, theme: 'green' }, categories: [], lists: [], tasks: [], events: [], canvasConnected: false, completedToday: 0, streak: null, introDone: true });
+  const empty = () => ({ signedIn: false, user: { first: '', last: '', email: '', username: '' }, prefs: { weekStart: 0, showDone: false, theme: 'green' }, categories: [], lists: [], tasks: [], taskOccurrences: [], events: [], canvasConnected: false, completedToday: 0, streak: null, introDone: true });
   let state = empty(), authUser, owner;
   const requireDb = () => { if (!db) throw new Error('Could not load Supabase. Check your connection and reload.'); };
   async function result(query) { const {data, error} = await query; if (error) throw new Error(error.message); return data; }
@@ -385,12 +579,13 @@
   async function load() {
     if (!owner) throw new Error('Please log in again.');
     // Keep the prior screen intact if any request fails.
-    const [profile, settings, categories, lists, tasks, events, streak, introSaved] = await Promise.all([
+    const [profile, settings, categories, lists, tasks, taskOccurrenceRows, events, streak, introSaved] = await Promise.all([
       result(db.from('User').select('UserID,FirstName,LastName,Username').eq('UserID', owner).single()),
       loadSettings(),
       allRows('Categories','CategoryID,DisplayName,DisplayColor','CategoryID'),
       allRows('Lists','ListID,Title,SortOrder','SortOrder'),
       allRows('Tasks','*','TaskID'),
+      result(db.from('coursewise_task_occurrences').select('series_id,occurrence_date,task_id,skipped,is_generated').eq('user_id', owner)),
       document.body.dataset.page === 'calendar'
         ? calendarEventsForUser(authUser.id)
         : Promise.resolve([]),
@@ -404,6 +599,7 @@
       timeFormat = settings.TimeFormat;
       try { localStorage.setItem(TIME_KEY, timeFormat); } catch {}
     }
+    const parsedTasks = tasks.filter(task => !task.CanvasExcluded).map(taskFromRow);
     state = { signedIn: true, user: { first: profile.FirstName, last: profile.LastName, username: profile.Username, email: authUser.email || '' },
       prefs: {
         theme: THEMES.some(t => t[0] === settings.ColorTheme) ? settings.ColorTheme : 'green',
@@ -415,9 +611,19 @@
       },
       categories: categories.map(c => ({id:id(c.CategoryID),name:c.DisplayName,tone:tones.includes(c.DisplayColor)?c.DisplayColor:'slate'})),
       lists: lists.map(l => ({id:id(l.ListID),title:l.Title,order:l.SortOrder})),
-      tasks: tasks
-        .filter(task => !task.CanvasExcluded)
-        .map(taskFromRow)
+      taskOccurrences: taskOccurrenceRows.map(item => ({
+        seriesId: item.series_id, date: item.occurrence_date, taskId: id(item.task_id),
+        skipped: item.skipped, generated: item.is_generated
+      })),
+      tasks: parsedTasks.map(task => {
+          const occurrence = taskOccurrenceRows.find(item => id(item.task_id) === task.id && !item.skipped);
+          if (occurrence) return { ...task, occurrenceIdentity: {
+            seriesId: occurrence.series_id, date: occurrence.occurrence_date
+          } };
+          return task.repeat && task.due ? { ...task, occurrenceIdentity: {
+            seriesId: taskSeriesId(parsedTasks, task), date: task.due
+          } } : task;
+        })
         .sort((a,b) => a.sortOrder-b.sortOrder || a.id.localeCompare(b.id)),
       events: events.map(event => ({ id: event.id, title: event.title, date: event.event_date,
         time: event.event_time?.slice(0, 5) || null, endTime: event.end_time?.slice(0, 5) || null,
@@ -456,9 +662,112 @@
     try { await load(); } catch { throw new Error('Your change was saved, but the screen could not refresh. Reload the page before making another change.'); }
   }
   async function write(query) { await result(query); await refreshAfterSave(); }
+  async function materializeTaskOccurrence(seriesId, occurrenceDate) {
+    const registration = state.taskOccurrences.find(item => item.seriesId === seriesId && item.date === occurrenceDate);
+    if (registration?.skipped) throw new Error('This occurrence was deleted.');
+    if (registration?.taskId) {
+      const registeredTask = state.tasks.find(task => task.id === registration.taskId);
+      if (registeredTask) return registeredTask;
+    }
+
+    const occurrence = taskOccurrences(state.tasks, occurrenceDate, occurrenceDate)
+      .find(task => task.occurrenceIdentity?.seriesId === seriesId &&
+        task.occurrenceIdentity.date === occurrenceDate);
+    if (!occurrence) throw new Error('This recurring occurrence is no longer available. Reload the page.');
+
+    let taskId = occurrence.id;
+    let generated = !!occurrence.virtualOccurrence;
+    if (generated) {
+      const rule = { ...asRule(occurrence.repeat), seriesId };
+      const sortOrder = Math.max(-1, ...state.tasks.filter(task => task.listId === occurrence.listId)
+        .map(task => task.sortOrder)) + 1;
+      const inserted = await result(db.from('Tasks').insert({
+        ...taskToRow({ ...occurrence, due: occurrenceDate, repeat: rule }),
+        SortOrder: sortOrder, UserID: owner, IsComplete: false, IsAssignment: false
+      }).select('TaskID').single());
+      taskId = id(inserted.TaskID);
+    }
+
+    let canonicalId;
+    try {
+      canonicalId = id(await result(db.rpc('coursewise_claim_task_occurrence', {
+        p_series_id: seriesId,
+        p_occurrence_date: occurrenceDate,
+        p_task_id: taskId,
+        p_generated: generated
+      })));
+    } catch (error) {
+      if (generated) {
+        const cleanup = await db.from('Tasks').delete().eq('TaskID', taskId).eq('UserID', owner);
+        if (cleanup.error) throw new Error(`${error.message} The unregistered occurrence could not be removed: ${cleanup.error.message}`);
+      }
+      throw error;
+    }
+    if (!canonicalId) {
+      if (generated) await result(db.from('Tasks').delete().eq('TaskID', taskId).eq('UserID', owner).select('TaskID'));
+      await refreshAfterSave();
+      throw new Error('This occurrence was deleted.');
+    }
+    if (canonicalId !== taskId) {
+      if (generated) await result(db.from('Tasks').delete().eq('TaskID', taskId).eq('UserID', owner).select('TaskID'));
+      taskId = canonicalId;
+    }
+    if (!registration?.taskId || registration.taskId !== canonicalId) await refreshAfterSave();
+    const task = state.tasks.find(item => item.id === taskId);
+    if (!task) throw new Error('The occurrence was saved but could not be loaded. Reload the page.');
+    return task;
+  }
+  async function deleteTaskOccurrence(taskId, identity) {
+    await result(db.rpc('coursewise_skip_task_occurrence', {
+      p_series_id: identity.seriesId, p_occurrence_date: identity.date
+    }));
+    const task = state.tasks.find(item => item.id === taskId);
+    const predecessor = state.tasks.find(item => item.spawned === taskId && item.id !== taskId);
+    const successor = task?.spawned ? state.tasks.find(item => item.id === task.spawned) : null;
+    const taskPattern = task?.repeat ? recurrencePattern(task.repeat) : null;
+    const seriesTasks = task ? state.tasks.filter(item =>
+      taskSeriesId(state.tasks, item) === identity.seriesId &&
+      (!taskPattern || (item.repeat && recurrencePattern(item.repeat) === taskPattern))) : [];
+    const seriesStart = seriesTasks.reduce((first, item) => {
+      const start = asRule(item.repeat)?.seriesStart || item.due;
+      return start && start < first ? start : first;
+    }, task?.due || identity.date);
+    const taskRule = task?.repeat ? asRule(task.repeat) : null;
+    const unbounded = !!taskRule && (!taskRule.end || taskRule.end.type === 'never');
+    const seriesTemplateRule = rule => {
+      const { materialized, seriesPosition, ...template } = rule;
+      return { ...template, seriesId: identity.seriesId, seriesStart };
+    };
+    const preserveSeriesAnchor = !!task && !successor && unbounded &&
+      (!taskRule.end || taskRule.end.type === 'never');
+    if (task && successor) {
+      const successorRule = asRule(successor.repeat);
+      if (successorRule) {
+        await result(db.from('Tasks').update({ Repeating: JSON.stringify({
+          ...(unbounded ? seriesTemplateRule(successorRule) : { ...successorRule, seriesId: identity.seriesId, seriesStart })
+        }) }).eq('TaskID', successor.id).eq('UserID', owner).select('TaskID').single());
+      }
+      if (predecessor) {
+        await result(db.from('Tasks').update({ SpawnedTaskID: successor.id })
+          .eq('TaskID', predecessor.id).eq('UserID', owner).select('TaskID').single());
+      }
+    } else if (task && predecessor) {
+      await result(db.from('Tasks').update({ SpawnedTaskID: null })
+        .eq('TaskID', predecessor.id).eq('UserID', owner).select('TaskID').single());
+    }
+    if (preserveSeriesAnchor) {
+      await result(db.from('Tasks').update({ Repeating: JSON.stringify({
+        ...seriesTemplateRule(taskRule)
+      }) }).eq('TaskID', taskId).eq('UserID', owner).select('TaskID').single());
+    } else if (task) {
+      await result(db.from('Tasks').delete().eq('TaskID', taskId).eq('UserID', owner).select('TaskID'));
+    }
+    await refreshAfterSave();
+  }
   const Tidy = {
-    toKey, shift, parseKey, fmtDate, fmtTime, timeFormat: () => timeFormat, esc, tones, themes: THEMES, repeats: REPEATS, repeatLabel, dayNames: DAYN, eventOccurrences,
+    toKey, shift, parseKey, fmtDate, fmtTime, timeFormat: () => timeFormat, esc, tones, themes: THEMES, repeats: REPEATS, repeatLabel, dayNames: DAYN, eventOccurrences, taskOccurrences, taskListItems,
     get categories() { return state.categories; }, get state() { return state; },
+    materializeTaskOccurrence,
     // One saved preference controls completed-task visibility on every page.
     visibleTasks: (tasks = state.tasks) =>
       tasks.filter(task => state.prefs.showDone || !task.done),
@@ -591,11 +900,11 @@
     },
     async updateTask(n,p) {
       const existing=state.tasks.find(t=>t.id===n), sameRepeat=!!existing&&existing.due===p.due&&JSON.stringify(existing.repeat)===JSON.stringify(p.repeat);
-      const plan=existing?.spawned&&sameRepeat?{tasks:[p],truncated:false}:recurrenceTasks(p), tasks=plan.tasks, row=taskToRow(tasks[0]);
+      const plan=existing?.occurrenceIdentity||existing?.spawned&&sameRepeat?{tasks:[{...p,repeat:existing.repeat}],truncated:false}:recurrenceTasks(p), tasks=plan.tasks, row=taskToRow(tasks[0]);
       let sortOrder=existing?.sortOrder ?? 0;
       if (existing && existing.listId!==p.listId) sortOrder=Math.max(-1,...state.tasks.filter(t=>t.listId===p.listId).map(t=>t.sortOrder))+1;
       row.SortOrder=sortOrder;
-      if (existing?.spawned&&!sameRepeat) {
+      if (existing?.spawned&&!sameRepeat&&!existing.occurrenceIdentity) {
         const descendants=[]; let childId=existing.spawned;
         while(childId&&!descendants.includes(childId)) {
           const child=state.tasks.find(t=>t.id===childId);
@@ -620,16 +929,33 @@
         p_source_task_ids:sourceTaskIds
       }));
     },
-    async deleteTask(n, scope = 'this') {
+    async deleteTask(n, scope = 'this', occurrenceIdentity) {
       const task = state.tasks.find(item => item.id === n);
       if (!task) throw new Error('Task not found. Reload the page.');
-      const ids = taskDeletionIds(state.tasks, task, scope);
+      if (scope === 'this' && occurrenceIdentity) {
+        const occurrence = await materializeTaskOccurrence(occurrenceIdentity.seriesId, occurrenceIdentity.date);
+        await deleteTaskOccurrence(occurrence.id, occurrenceIdentity);
+        return;
+      }
+      const identity = occurrenceIdentity || task.occurrenceIdentity;
+      const target = identity ? { ...task, due: identity.date, occurrenceIdentity: identity } : task;
+      const ids = taskDeletionIds(state.tasks, target, scope);
 
       const predecessor = state.tasks.find(item => item.spawned && ids.has(item.spawned) && !ids.has(item.id));
       if (predecessor) {
-        const nextId = scope === 'this' && task.spawned && state.tasks.some(item => item.id === task.spawned)
+        const nextId = task.spawned && !ids.has(task.spawned) && state.tasks.some(item => item.id === task.spawned)
           ? task.spawned : null;
         await result(db.from('Tasks').update({SpawnedTaskID:nextId}).eq('TaskID',predecessor.id).eq('UserID',owner).select('TaskID').single());
+      }
+      if (scope === 'following' && identity) {
+        const seriesTasks = state.tasks.filter(item => taskSeriesId(state.tasks, item) === identity.seriesId && !ids.has(item.id));
+        const endDate = shiftKey(identity.date, -1);
+        for (const item of seriesTasks) {
+          if (!item.repeat || asRule(item.repeat).materialized) continue;
+          await result(db.from('Tasks').update({
+            Repeating: JSON.stringify({ ...asRule(item.repeat), seriesId: identity.seriesId, end: { type: 'on', date: endDate } })
+          }).eq('TaskID', item.id).eq('UserID', owner).select('TaskID').single());
+        }
       }
       await write(db.from('Tasks').delete().in('TaskID',[...ids]).eq('UserID',owner).select('TaskID'));
     },
@@ -654,7 +980,11 @@
       }
       await write(db.from('Tasks').delete().in('TaskID', [...ids]).eq('UserID', owner).select('TaskID'));
     },
-    async toggleTask(n) {
+    async toggleTask(n, identity) {
+      if (identity) {
+        const occurrence = await materializeTaskOccurrence(identity.seriesId, identity.date);
+        n = occurrence.id;
+      }
       const t=state.tasks.find(t=>t.id===n); if (!t) throw new Error('Task not found. Reload the page.');
       let next, ended=false;
       if (!t.done && t.repeat && t.due && !asRule(t.repeat).materialized) {
