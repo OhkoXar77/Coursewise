@@ -255,6 +255,32 @@
     }
     return ids;
   }
+  function hasNextOccurrence(tasks, task, due) {
+    const rule = asRule(task.repeat);
+    if (!rule) return false;
+    const normalizeRule = value => {
+      const recurrence = { ...value };
+      delete recurrence.materialized;
+      delete recurrence.seriesId;
+      delete recurrence.seriesPosition;
+      delete recurrence.seriesDays;
+      delete recurrence.seriesEnd;
+      return JSON.stringify(recurrence);
+    };
+    return tasks.some(candidate => {
+      if (candidate.id === task.id || candidate.due !== due || !candidate.repeat) return false;
+      const candidateRule = asRule(candidate.repeat);
+      if (!candidateRule) return false;
+      if (rule.seriesId && candidateRule.seriesId) return rule.seriesId === candidateRule.seriesId;
+      return candidate.title === task.title &&
+        candidate.categoryId === task.categoryId &&
+        candidate.listId === task.listId &&
+        candidate.time === task.time &&
+        candidate.reminder === task.reminder &&
+        candidate.fromCanvas === task.fromCanvas &&
+        normalizeRule(rule) === normalizeRule(candidateRule);
+    });
+  }
   function repeatLabel(r) {
     if (typeof r === "string") return REPEATS[r];
     const n = r.interval || 1;
@@ -631,10 +657,11 @@
     async toggleTask(n) {
       const t=state.tasks.find(t=>t.id===n); if (!t) throw new Error('Task not found. Reload the page.');
       let next, ended=false;
-      if (!t.done && t.repeat && t.due && !asRule(t.repeat).materialized && !t.spawned) {
-        const end=asRule(t.repeat).end || {type:'never'}, occ=t.occ || 1;
-        next=nextDate(t.due,t.repeat);
-        if ((end.type==='after' && occ>=end.count) || (end.type==='on' && end.date && next>end.date)) {next=undefined;ended=true;}
+      if (!t.done && t.repeat && t.due && !asRule(t.repeat).materialized) {
+        const rule=asRule(t.repeat), end=rule.end || {type:'never'}, occ=t.occ || 1;
+        const candidate=nextDate(t.due,t.repeat);
+        if ((end.type==='after' && occ>=end.count) || (end.type==='on' && end.date && candidate>end.date)) ended=true;
+        else if (!t.spawned && !hasNextOccurrence(state.tasks,t,candidate)) next=candidate;
       }
       await write(db.rpc('tidy_toggle_task',{p_id:n,p_expected_done:t.done,p_next_due:next?dueStamp({...t,due:next}):null}));
       return {done:!t.done,next,ended};
