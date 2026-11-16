@@ -868,5 +868,5 @@
     void checkCanvasOnSessionStart(rerender);
   }
 
-  window.Tidy.ui = { run, icons, toast, updateCard, canvasNotice, canvasChangesFromSync, clearCanvasNewItems, modal, taskRow, taskDialog, eventDialog, eventDeletionDialog, categoryDialog, manageCategories, recurrenceDialog, listDialog, toggle, page, options };
+  window.Tidy.ui = { run, icons, toast, updateCard, canvasNotice, canvasChangesFromSync, clearCanvasNewItems, modal, taskRow, taskDialog, taskDeletionDialog, eventDialog, eventDeletionDialog, categoryDialog, manageCategories, recurrenceDialog, listDialog, toggle, page, options };
 })();

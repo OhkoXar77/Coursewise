@@ -156,6 +156,27 @@
         }
         return;
       }
+      const deleteOccurrence = e.target.closest("[data-delete-occurrence]");
+      const deleteTask = e.target.closest("[data-delete-task]");
+      if (deleteOccurrence || deleteTask) {
+        e.stopPropagation();
+        const button = deleteOccurrence || deleteTask;
+        const task = T.state.tasks.find(item => item.id === button.dataset.deleteOccurrence || item.id === button.dataset.deleteTask);
+        const identity = button.dataset.occurrenceSeries && button.dataset.occurrenceDate
+          ? { seriesId: button.dataset.occurrenceSeries, date: button.dataset.occurrenceDate }
+          : null;
+        if (task) U.run(async () => {
+          const occurrence = deleteOccurrence && identity
+            ? await T.materializeTaskOccurrence(identity.seriesId, identity.date)
+            : task;
+          U.taskDeletionDialog({
+            task: identity ? { ...occurrence, due: identity.date, occurrenceIdentity: identity } : occurrence,
+            occurrenceOnly: !!deleteOccurrence,
+            done: () => { d.close(); render(); dayDialog(key); }
+          });
+        }, button);
+        return;
+      }
       const tg = e.target.closest("[data-toggle]"); if (!tg) return;
       e.stopPropagation();
       const identity = tg.dataset.occurrenceSeries && tg.dataset.occurrenceDate
