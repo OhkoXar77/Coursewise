@@ -728,7 +728,7 @@ function northPoleArtwork(state = "wrapping") {
       <text x="12" y="30" font-size="15">z</text><text x="27" y="14" font-size="19">Z</text></g>
   </g>`;
   return svg(`<path d="M0 13Q180 43 360 13" stroke="#182C20" stroke-width="2.5"/>
-    ${state === "done" ? sleepy : `${scenes[state] || ""}${elf}`}`);
+    ${lights}${state === "done" ? sleepy : `${scenes[state] || ""}${elf}`}`);
 }
 
 window.CoursewiseNorthPoleArt = northPoleArtwork;
@@ -3477,6 +3477,9 @@ window.CoursewiseWhimsy = {
     <g transform="translate(142 25)"><path d="M0 0Q-21 -17 -20 0Q-19 14 0 2Z" fill="#B8434D"/>
     <path d="M0 0Q21 -17 20 0Q19 14 0 2Z" fill="#C85259"/><circle r="5" fill="#8D3039"/>
     <path d="M-2 4L-9 27L1 23L8 28L4 4" fill="#B8434D"/></g>`);
+  
+
+
   const presents=svgImg(`<ellipse cx="82" cy="90" rx="66" ry="7" fill="#40533E" opacity=".12"/>
     <rect x="25" y="42" width="59" height="47" rx="4" fill="#B8454D"/>
     <path d="M54 42V89M25 62H84" stroke="#F1C66C" stroke-width="7"/>
@@ -3507,36 +3510,8 @@ window.CoursewiseWhimsy = {
     <circle cx="105" cy="70" r="5" fill="#9D783B"/>`);
   const style=document.createElement('style');style.id='cw-np-card-style';
   style.textContent=`
-    /* Snapshot lights — anchored at the top */
-    html[data-whimsy="northpole"] .hero {
-      position: relative;
-    }
+    
 
-    html[data-whimsy="northpole"] .cw-np-hero-lights {
-      position: absolute !important;
-      top: 0 !important;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(65%, 260px);
-      height: 65px;
-      background-image: ${garland};
-      background-size: 100% 100%;
-      background-repeat: no-repeat;
-      pointer-events: none;
-      z-index: 6 !important;
-    }
-
-    html:not([data-whimsy="northpole"])
-    .cw-np-hero-lights {
-      display: none !important;
-    }
-
-    @media (max-width: 650px) {
-      html[data-whimsy="northpole"] .cw-np-hero-lights {
-        width: 55%;
-        height: 42px;
-      }
-    }
     html[data-whimsy="northpole"] .cw-np-decor {
       position:absolute!important;pointer-events:none!important;user-select:none;z-index:1;
       background-repeat:no-repeat;background-position:center;background-size:contain;
@@ -3600,21 +3575,7 @@ window.CoursewiseWhimsy = {
   ];
   function decorate(){
     if(document.documentElement.dataset.whimsy!=='northpole')return;
-    // Keep the Snapshot lights anchored to the
-    // card instead of the elf background illustration.
-    const snapshot = document.querySelector(
-      'body[data-page="home"] .hero'
-    );
-
-    if (
-      snapshot &&
-      !snapshot.querySelector(':scope > .cw-np-hero-lights')
-    ) {
-      const lights = document.createElement("span");
-      lights.className = "cw-np-hero-lights";
-      lights.setAttribute("aria-hidden", "true");
-      snapshot.appendChild(lights);
-    }
+    
     for(const [selector,type] of cardRules){
       document.querySelectorAll(selector).forEach((card,index)=>{
         let kind=type==='alternate'?['garland','presents','ornaments','holly'][index%4]:type;
