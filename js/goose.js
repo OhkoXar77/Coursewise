@@ -622,7 +622,10 @@
 
 
   function shouldShowGoose() {
-    return Boolean(document.body?.dataset?.page);
+    return Boolean(
+      document.body?.dataset?.page &&
+      document.visibilityState === "visible"
+    );
   }
 
   function stopTimer() {
@@ -957,6 +960,24 @@ function chooseNextBehavior() {
   }).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["data-whimsy", "data-goose"]
+  });
+
+  // Hide the goose when leaving this page.
+  // Prevents him appearing during navigation.
+
+  window.addEventListener("pagehide", () => {
+    if (!goose) return;
+
+    goose.hidden = true;
+    stopTimer();
+  });
+
+  // Restore him when returning to a cached page.
+
+  window.addEventListener("pageshow", () => {
+    if (!goose) return;
+
+    syncVisibility();
   });
 
   // Actually create the goose when the page is ready.

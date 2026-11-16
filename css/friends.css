@@ -222,3 +222,48 @@
   .stack .cw-f-card .cw-f-request,.stack .cw-f-card .cw-f-invite{grid-row:4}
 }
 @media(max-width:860px){.cw-f-card-actions{flex-wrap:wrap}.cw-f-card-actions .btn{flex:1 1 8rem}}
+
+/* MOBILE FIX — Keep themed cheer labels inside buttons */
+
+@media (max-width: 600px) {
+  .cw-f-dialog .cw-f-person {
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .cw-f-dialog .cw-f-person-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .cw-f-dialog .cw-f-person-actions {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .cw-f-dialog .cw-f-cheer {
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    height: auto;
+    padding: 0.5rem 0.65rem;
+
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .cw-f-dialog .cw-f-cheer > span:first-child {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .cw-f-dialog .cw-f-cheer {
+    font-size: 0.68rem;
+    padding: 0.45rem 0.5rem;
+  }
+}
