@@ -1,0 +1,17 @@
+{
+  "name": "coursewise-admin-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Admin-only Coursewise user and task management portal",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "check": "node --check index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0"
+  }
+}

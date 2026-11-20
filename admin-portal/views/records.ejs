@@ -1,0 +1,52 @@
+<%- include("partials/header", { title: "Maintain Records", loggedIn, adminEmail, notice }) %>
+<section class="page-heading">
+  <div><p class="eyebrow">ADMIN WORKSPACE / RECORDS</p><h1>Maintain Records</h1><p class="lead-small">Manage task records stored in the shared Coursewise Tasks table.</p></div>
+  <a class="button button-primary" href="/records/new"><span aria-hidden="true">＋</span> Add record</a>
+</section>
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Task records</h2><p data-record-count data-record-label="records" data-record-singular="record"><%= records.length %> record<%= records.length === 1 ? "" : "s" %></p></div>
+    <div class="panel-tools">
+      <% if (records.length) { %><label class="search-box"><span class="sr-only">Filter records</span><span aria-hidden="true">⌕</span><input type="search" data-table-search placeholder="Search records" autocomplete="off"></label><% } %>
+      <a class="text-link" href="/">← Back home</a>
+    </div>
+  </div>
+  <% if (records.length) { %>
+    <div class="table-tools" data-table-tools>
+      <div class="table-wrap">
+        <table data-sortable-table>
+          <thead><tr>
+            <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="0">Record <span aria-hidden="true">↕</span></button></th>
+            <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="1">Owner <span aria-hidden="true">↕</span></button></th>
+            <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="2">Due date <span aria-hidden="true">↕</span></button></th>
+            <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="3">Status <span aria-hidden="true">↕</span></button></th>
+            <th scope="col">Actions</th>
+          </tr></thead>
+          <tbody>
+            <% records.forEach((record) => { const owner = names.get(String(record.UserID)) || "Unknown user"; const dueDate = record.TaskDueDate ? String(record.TaskDueDate).slice(0, 10) : ""; const status = record.IsComplete ? "Complete" : "In progress"; %>
+              <tr data-filter-row data-search="<%= [record.Name, owner, dueDate, status].join(' ') %>">
+                <td class="task-name" data-sort-value="<%= record.Name %>"><%= record.Name %></td>
+                <td data-sort-value="<%= owner %>"><%= owner %></td>
+                <td data-sort-value="<%= dueDate %>"><%= formatDueDate(record.TaskDueDate) %></td>
+                <td data-sort-value="<%= record.IsComplete ? '1' : '0' %>"><span class="status-pill <%= record.IsComplete ? 'status-done' : 'status-open' %>"><i></i><%= status %></span></td>
+                <td>
+                  <div class="row-actions">
+                    <a class="button button-small button-outline" href="/records/<%= encodeURIComponent(record.TaskID) %>/edit">Edit</a>
+                    <form action="/records/<%= encodeURIComponent(record.TaskID) %>/delete" method="post" data-confirm="Delete this record?">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="button button-small button-danger" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p class="filter-empty" data-filter-empty hidden>No records match your search.</p>
+    </div>
+  <% } else { %>
+    <div class="empty-state"><span class="empty-icon">✓</span><h3>No records yet</h3><p>Add a Coursewise task record to get started.</p><a class="button button-primary" href="/records/new">Add first record</a></div>
+  <% } %>
+</section>
+<%- include("partials/footer") %>

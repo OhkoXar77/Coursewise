@@ -1,0 +1,8 @@
+<%- include("partials/header", { title, loggedIn, adminEmail, notice }) %>
+<section class="error-panel">
+  <p class="eyebrow">COURSEWISE ADMIN</p>
+  <h1><%= title %></h1>
+  <p class="lead-small"><%= message %></p>
+  <a class="button button-primary" href="/">Return home</a>
+</section>
+<%- include("partials/footer") %>
