@@ -11,11 +11,11 @@ This local Node/Express app provides the IS 401 admin-only interface for the Cou
 5. From this folder, run `npm install`, then `npm start`.
 6. Open `http://localhost:3000`.
 
-Only accounts in `public.coursewise_admins` can use the user and record screens. The server verifies that allow-list on every request. User credentials are managed by Supabase Auth; the app never stores passwords in the `User` table.
+Only accounts in `public.coursewise_admins` can use the user and record screens. The server verifies that allow-list on every request. Existing administrators can manage that allow-list from Maintain Users, but cannot remove their own access. User credentials are managed by Supabase Auth; the app never stores passwords in the `User` table.
 
 ## Included admin workflows
 
-- **Maintain Users:** list, search, add, edit, and delete Coursewise profile/Auth accounts.
+- **Maintain Users:** list, search, add, edit, and delete Coursewise profile/Auth accounts; grant or remove administrator access for linked accounts.
 - **Maintain Records:** list, search, sort, add, edit, and delete task records in `public."Tasks"`.
 - **Logout:** clears the signed, HTTP-only admin session cookie.
 

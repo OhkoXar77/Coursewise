@@ -19,6 +19,7 @@
             <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="0">Email <span aria-hidden="true">↕</span></button></th>
             <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="1">Name <span aria-hidden="true">↕</span></button></th>
             <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort-column="2">Username <span aria-hidden="true">↕</span></button></th>
+            <th scope="col">Role</th>
             <th scope="col">Actions</th>
           </tr></thead>
           <tbody>
@@ -27,10 +28,18 @@
                 <td class="email-cell" data-sort-value="<%= user.email %>"><%= user.email %></td>
                 <td data-sort-value="<%= name %>"><%= name %></td>
                 <td data-sort-value="<%= user.Username || '' %>"><span class="username-chip"><%= user.Username || "—" %></span></td>
+                <td><span class="username-chip"><%= user.isAdmin ? "Administrator" : "User" %></span></td>
                 <td>
                   <div class="row-actions">
                     <% if (user.hasAuthAccount) { %>
                       <a class="button button-small button-outline" href="/users/<%= encodeURIComponent(user.UserID) %>/edit">Edit</a>
+                      <% if (String(user.AuthUserID) !== String(adminId)) { %>
+                        <form action="/users/<%= encodeURIComponent(user.UserID) %>/admin-role" method="post" <%= user.isAdmin ? 'data-confirm="Remove administrator access from this account?"' : '' %>>
+                          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                          <input type="hidden" name="admin_action" value="<%= user.isAdmin ? 'revoke' : 'grant' %>">
+                          <button class="button button-small <%= user.isAdmin ? 'button-danger' : 'button-outline' %>" type="submit"><%= user.isAdmin ? "Remove admin" : "Make admin" %></button>
+                        </form>
+                      <% } %>
                     <% } %>
                     <% if (String(user.AuthUserID) !== String(adminId)) { %>
                       <form action="/users/<%= encodeURIComponent(user.UserID) %>/delete" method="post" data-confirm="Delete this user account and profile?">

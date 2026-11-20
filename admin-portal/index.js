@@ -232,6 +232,14 @@ async function isCourseWiseAdmin(authUserId) {
   return Array.isArray(rows) && rows.length === 1;
 }
 
+async function listAdminIds() {
+  const rows = await supabaseRequest(
+    "/rest/v1/coursewise_admins?select=user_id&limit=1000"
+  );
+  if (!Array.isArray(rows)) throw new Error("Could not load administrator roles.");
+  return new Set(rows.map((row) => String(row.user_id)));
+}
+
 async function listAuthUsers() {
   const users = [];
   for (let page = 1; page <= 100; page += 1) {
@@ -246,11 +254,12 @@ async function listAuthUsers() {
 }
 
 async function listProfiles() {
-  const [profiles, authUsers] = await Promise.all([
+  const [profiles, authUsers, adminIds] = await Promise.all([
     supabaseRequest(
       "/rest/v1/User?select=UserID,AuthUserID,FirstName,LastName,Username&order=FirstName.asc,LastName.asc"
     ),
-    listAuthUsers()
+    listAuthUsers(),
+    listAdminIds()
   ]);
   const authById = new Map(authUsers.map((user) => [user.id, user]));
   return profiles.map((profile) => {
@@ -258,7 +267,8 @@ async function listProfiles() {
     return {
       ...profile,
       email: authUser?.email || "(no Auth account found)",
-      hasAuthAccount: Boolean(authUser)
+      hasAuthAccount: Boolean(authUser),
+      isAdmin: adminIds.has(String(profile.AuthUserID))
     };
   });
 }
@@ -584,6 +594,49 @@ app.post("/users/:id/edit", requireLogin, async (req, res) => {
     return redirectWithNotice(res, "User changes saved.", "success", "/users");
   } catch (error) {
     return renderError(res, error, "Could not update user");
+  }
+});
+
+app.post("/users/:id/admin-role", requireLogin, async (req, res) => {
+  try {
+    const user = await getProfile(req.params.id);
+    if (!user) {
+      return res.status(404).render("error", {
+        title: "User not found",
+        message: "That profile could not be found."
+      });
+    }
+    if (!user.hasAuthAccount || !user.AuthUserID) {
+      throw new Error("This profile has no matching Supabase Auth account and cannot be assigned an admin role.");
+    }
+    if (user.AuthUserID === req.admin.id) {
+      throw new Error("You cannot change your own administrator access.");
+    }
+
+    const action = String(req.body.admin_action || "");
+    if (action === "grant") {
+      await supabaseRequest(
+        "/rest/v1/coursewise_admins?on_conflict=user_id",
+        {
+          method: "POST",
+          body: [{ user_id: user.AuthUserID }],
+          prefer: "resolution=merge-duplicates,return=minimal"
+        }
+      );
+      return redirectWithNotice(res, `Administrator access granted to ${user.email}.`, "success", "/users");
+    }
+    if (action === "revoke") {
+      await supabaseRequest(
+        `/rest/v1/coursewise_admins?user_id=eq.${encoded(user.AuthUserID)}`,
+        { method: "DELETE", prefer: "return=minimal" }
+      );
+      return redirectWithNotice(res, `Administrator access removed from ${user.email}.`, "success", "/users");
+    }
+    const error = new Error("Choose whether to grant or remove administrator access.");
+    error.status = 400;
+    throw error;
+  } catch (error) {
+    return renderError(res, error, "Could not change administrator access");
   }
 });
 
